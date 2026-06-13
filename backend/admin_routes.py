@@ -15,6 +15,7 @@ from urllib import error as urllib_error
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+
 from models import (
     AdminProfile,
     RegulatoryRule,
