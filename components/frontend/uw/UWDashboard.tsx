@@ -1,95 +1,15 @@
-"use client"
+'use client'
 
 import { AlertCircle, FileText, Clock, Shield, ChevronRight } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import type { UWScene } from '@/lib/uwTypes'
+import { SUBMISSIONS, PORTFOLIO_METRICS } from '@/lib/uwData'
 
-// 3 carried over from Eva's day + 4 new overnight = 7 open submissions
-const SUBMISSIONS = [
-  {
-    id: 'litware',
-    client: 'Litware Industries',
-    broker: 'Adatum',
-    line: 'Commercial Property',
-    tiv: '$650M',
-    requestedLimit: '$30M',
-    status: 'urgent' as const,
-    deadline: 'Today 3:00 PM',
-    tag: 'New',
-  },
-  {
-    id: 'northwind',
-    client: 'Northwind Logistics',
-    broker: 'Contoso Brokers',
-    line: 'General Liability',
-    tiv: '$180M',
-    requestedLimit: '$5M',
-    status: 'pending' as const,
-    tag: 'Carried over',
-  },
-  {
-    id: 'tailspin',
-    client: 'Tailspin Aerospace',
-    broker: 'Proseware Insurance',
-    line: 'General Liability + Property',
-    tiv: '$210M',
-    requestedLimit: '$15M',
-    status: 'pending' as const,
-    tag: 'New',
-  },
-  {
-    id: 'metro',
-    client: 'Metro Warehouse Complex',
-    broker: 'Woodgrove Premier Brokers',
-    line: 'Commercial Property + Equipment Breakdown',
-    tiv: '$340M',
-    requestedLimit: '$20M',
-    status: 'in-review' as const,
-    tag: 'Carried over',
-  },
-  {
-    id: 'alpine',
-    client: 'Alpine Ventures Group',
-    broker: 'Proseware Insurance',
-    line: 'Commercial Property',
-    tiv: '$95M',
-    requestedLimit: '$12M',
-    status: 'pending' as const,
-    tag: 'Carried over',
-  },
-  {
-    id: 'contoso-mfg',
-    client: 'Contoso Manufacturing Group',
-    broker: 'WG Premier Brokers',
-    line: 'Commercial Property',
-    tiv: '$820M',
-    requestedLimit: '$22M',
-    status: 'pending' as const,
-    tag: 'New',
-  },
-  {
-    id: 'fourth-coffee',
-    client: 'Fourth Coffee Distribution',
-    broker: 'Contoso Brokers',
-    line: 'Commercial Property + GL',
-    tiv: '$45M',
-    requestedLimit: '$8M',
-    status: 'pending' as const,
-    tag: 'New',
-  },
-]
-
-const RENEWALS = [
-  { name: 'Tailspin Aerospace', days: 22, broker: 'Proseware Insurance' },
-  { name: 'Contoso Mfg Group', days: 44, broker: 'WG Premier Brokers' },
-  { name: 'Northwind Logistics', days: 62, broker: 'Contoso Brokers' },
-  { name: 'Fourth Coffee Dist.', days: 78, broker: 'Contoso Brokers' },
-]
-
-function renewalUrgency(days: number) {
-  if (days <= 20) return 'bg-red-50 text-red-600'
-  if (days <= 35) return 'bg-amber-50 text-amber-600'
-  return 'bg-indigo-50 text-indigo-600'
+interface UWDashboardProps {
+  onSceneChange: (scene: UWScene) => void
 }
+
+const m = PORTFOLIO_METRICS.morning
 
 function KPICard({
   label,
@@ -137,10 +57,20 @@ function StatusBadge({ status }: { status: 'urgent' | 'pending' | 'in-review' | 
   )
 }
 
-export function MarcusDashboard() {
-  const newCount = SUBMISSIONS.filter(s => s.tag === 'New').length
-  const urgentCount = SUBMISSIONS.filter(s => s.status === 'urgent').length
+const UPCOMING_RENEWALS = [
+  { name: 'Fabrikam Manufacturing', days: 15, broker: 'Adatum' },
+  { name: 'Northwind Logistics', days: 32, broker: 'Contoso Brokers' },
+  { name: 'Alpine Ventures Group', days: 39, broker: 'Proseware Insurance' },
+  { name: 'Metro Warehouse Complex', days: 51, broker: 'WG Premier Brokers' },
+]
 
+function renewalUrgency(days: number) {
+  if (days <= 20) return 'bg-red-50 text-red-600'
+  if (days <= 35) return 'bg-amber-50 text-amber-600'
+  return 'bg-indigo-50 text-indigo-600'
+}
+
+export function UWDashboard({ onSceneChange }: UWDashboardProps) {
   return (
     <div className="h-full overflow-y-auto bg-gray-50" style={{ scrollbarGutter: 'stable' }}>
       <div className="max-w-7xl mx-auto px-6 py-6">
@@ -148,12 +78,12 @@ export function MarcusDashboard() {
         {/* Greeting */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Good morning, Marcus</h1>
+            <h1 className="text-2xl font-semibold text-gray-900">Good morning, Eva</h1>
             <p className="text-sm text-gray-500 mt-0.5">Commercial Underwriter · Authorized up to $25M primary line</p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="bg-indigo-50 text-indigo-700 rounded-full px-3 py-1 text-sm font-medium">$3.2B Portfolio TIV</span>
-            <span className="bg-gray-100 text-gray-600 rounded-full px-3 py-1 text-sm">{SUBMISSIONS.length} Active Submissions</span>
+            <span className="bg-indigo-50 text-indigo-700 rounded-full px-3 py-1 text-sm font-medium">$4.8B Portfolio TIV</span>
+            <span className="bg-gray-100 text-gray-600 rounded-full px-3 py-1 text-sm">{m.submissionsTotal} Active Submissions</span>
           </div>
         </div>
 
@@ -161,27 +91,30 @@ export function MarcusDashboard() {
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-6 flex items-center gap-3">
           <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
           <div className="flex-1">
-            <span className="text-sm font-medium text-amber-900">{newCount} new submissions received overnight</span>
-            <span className="text-sm text-amber-700"> · 3 open items carried over from yesterday. Copilot has briefed your queue.</span>
+            <span className="text-sm font-medium text-amber-900">3 new submissions received overnight</span>
+            <span className="text-sm text-amber-700"> · Copilot has analyzed your queue. 1 requires immediate attention.</span>
           </div>
-          <span className="bg-amber-100 text-amber-800 text-xs font-medium rounded-full px-2.5 py-1 shrink-0">
-            {urgentCount} urgent
-          </span>
+          <button
+            className="bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg px-4 py-1.5 transition-colors shrink-0"
+            onClick={() => onSceneChange('triage')}
+          >
+            View Flagged Submissions →
+          </button>
         </div>
 
         {/* KPI row */}
         <div className="grid grid-cols-4 gap-4 mb-6">
           <KPICard
             label="Open Submissions"
-            value={String(SUBMISSIONS.length)}
-            detail="4 new · 3 carried over"
+            value={String(m.submissionsTotal)}
+            detail={`${m.pendingDecisions} require decision today`}
             icon={FileText}
             iconColor="text-indigo-500"
             iconBg="bg-indigo-50"
           />
           <KPICard
             label="Avg. Cycle Time"
-            value="4.3d"
+            value={`${m.cycleTimeDays}d`}
             detail="Current portfolio average"
             icon={Clock}
             iconColor="text-blue-500"
@@ -189,7 +122,7 @@ export function MarcusDashboard() {
           />
           <KPICard
             label="Pending Decisions"
-            value="4"
+            value={String(m.pendingDecisions)}
             detail="Require your action today"
             icon={AlertCircle}
             iconColor="text-amber-500"
@@ -198,7 +131,7 @@ export function MarcusDashboard() {
           />
           <KPICard
             label="Portfolio TIV"
-            value="$3.2B"
+            value="$4.8B"
             detail="Total insured value managed"
             icon={Shield}
             iconColor="text-emerald-500"
@@ -209,7 +142,7 @@ export function MarcusDashboard() {
         {/* Main grid */}
         <div className="grid grid-cols-3 gap-4 mb-6">
 
-          {/* Submissions — 2/3 */}
+          {/* Broker submissions — 2/3 */}
           <div className="col-span-2 bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
               <h3 className="text-sm font-semibold text-gray-800">Broker Submissions</h3>
@@ -227,9 +160,6 @@ export function MarcusDashboard() {
                         {sub.client}
                       </span>
                       <span className="text-xs text-gray-400">via {sub.broker}</span>
-                      <span className={`text-[10px] font-medium rounded px-1.5 py-0.5 ${sub.tag === 'New' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
-                        {sub.tag}
-                      </span>
                     </div>
                     <div className="text-xs text-gray-500 mt-0.5">
                       {sub.line} · {sub.requestedLimit} requested · TIV {sub.tiv}
@@ -237,7 +167,7 @@ export function MarcusDashboard() {
                   </div>
                   <div className="shrink-0 text-right">
                     <StatusBadge status={sub.status} />
-                    {'deadline' in sub && sub.deadline && (
+                    {sub.deadline && (
                       <div className="text-xs text-red-600 font-medium mt-1">{sub.deadline}</div>
                     )}
                   </div>
@@ -249,7 +179,7 @@ export function MarcusDashboard() {
             </div>
           </div>
 
-          {/* Copilot brief — 1/3 */}
+          {/* Copilot morning brief — 1/3 */}
           <div className="col-span-1">
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
               <div className="px-5 py-4 border-b border-gray-100 bg-indigo-50/50">
@@ -257,23 +187,23 @@ export function MarcusDashboard() {
               </div>
               <div className="p-4 space-y-3">
                 <p className="text-sm text-gray-700 leading-relaxed">
-                  Eva completed the Fabrikam Manufacturing quote yesterday and handed off 3 open submissions. Litware Industries (Adatum) is flagged as your top priority — <span className="font-semibold text-red-600">deadline 3:00 PM today</span>.
+                  Fabrikam Manufacturing (Adatum) is your top priority — $50M property tower, TIV $2.1B, broker deadline at <span className="font-semibold text-red-600">5:00 PM today</span>.
                 </p>
                 <p className="text-sm text-gray-700 leading-relaxed">
-                  Litware's $30M request is near your $25M authority. A senior referral may be required. Open Copilot for a full briefing.
+                  The request exceeds your $25M authority. A senior referral will be needed. Open Copilot for a full briefing.
                 </p>
                 <div className="pt-1 space-y-1.5">
                   <div className="flex items-start gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" />
-                    <span className="text-xs text-gray-600">Northwind Logistics — identity docs still outstanding</span>
+                    <div className="w-1.5 h-1.5 rounded-full bg-red-500 mt-1.5 shrink-0" />
+                    <span className="text-xs text-gray-600">Northwind Logistics — identity verification incomplete</span>
                   </div>
                   <div className="flex items-start gap-2">
                     <div className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" />
-                    <span className="text-xs text-gray-600">Metro Warehouse — inspection response awaited</span>
+                    <span className="text-xs text-gray-600">Metro Warehouse — inspection report overdue</span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5 shrink-0" />
-                    <span className="text-xs text-gray-600">Contoso Mfg Group — new, $22M property tower</span>
+                    <div className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" />
+                    <span className="text-xs text-gray-600">Alpine Ventures — ACORD 125 incomplete</span>
                   </div>
                 </div>
               </div>
@@ -285,10 +215,10 @@ export function MarcusDashboard() {
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-gray-800">Upcoming Renewals</h3>
-            <span className="text-xs text-gray-400">Next 90 days</span>
+            <span className="text-xs text-gray-400">Next 60 days</span>
           </div>
           <div className="grid grid-cols-4 divide-x divide-gray-50">
-            {RENEWALS.map(({ name, days, broker }) => (
+            {UPCOMING_RENEWALS.map(({ name, days, broker }) => (
               <div key={name} className="px-5 py-4">
                 <div className={`inline-flex items-center gap-1.5 text-xs font-bold rounded-lg px-2 py-1 mb-2 ${renewalUrgency(days)}`}>
                   <Clock className="w-3 h-3" />

@@ -39,35 +39,15 @@ except ImportError:
     fabric_client = None
     def build_fabric_enriched_prompt(*a, **kw): return ""
 
-# Azure AI Projects imports
-from azure.identity import DefaultAzureCredential, AzureCliCredential
-from azure.ai.projects import AIProjectClient
-
-# Evaluation imports - graceful fallback
-EVALUATIONS_AVAILABLE = False
-
-# Configuration
-project_endpoint = os.environ.get("PROJECT_ENDPOINT", "")
-agent_name = os.environ.get("AGENT_NAME", "woodgrove-webinterface-agent-2")
-
 # Data directory path
 DATA_DIR = Path(__file__).parent / "data"
 
-# Initialize Azure AI Projects client
-environment = os.environ.get("ENVIRONMENT", "development")
-demo_tenant_id = os.environ.get("DEMO_TENANT_ID", "")
-if environment == "production":
-    print("Using DefaultAzureCredential (managed identity) for production")
-    credential = DefaultAzureCredential()
-elif demo_tenant_id:
-    print(f"Using AzureCliCredential with demo tenant: {demo_tenant_id}")
-    credential = AzureCliCredential(tenant_id=demo_tenant_id)
-else:
-    credential = DefaultAzureCredential()
+# Direct Line configuration (Copilot Studio)
+DIRECTLINE_SECRET = os.environ.get("DIRECTLINE_SECRET", "")
+DIRECTLINE_BASE = "https://directline.botframework.com/v3/directline"
+_dl_sessions: dict = {}  # session_id -> {conversation_id, watermark}
 
-project_client = AIProjectClient(endpoint=project_endpoint, credential=credential)
-openai_client = project_client.get_openai_client()
-print(f"Azure AI Projects client initialised — agent: {agent_name}")
+print(f"Direct Line configured: {'yes' if DIRECTLINE_SECRET else 'no — DIRECTLINE_SECRET not set'}")
 
 # Load data from JSON files
 def load_user_profiles():
@@ -323,62 +303,65 @@ class ConversationManager:
 
 conversation_manager = ConversationManager()
 
-AGENT_AVAILABLE = True
 
-# In-memory storage for evaluation results (stub — evaluations not available post-migration)
-evaluation_cache = {}
-
-async def evaluate_agent_run(thread_id: str, run_id: str) -> Optional[Dict[str, Any]]:
-    return {"error": "Evaluations not available"}
+def _dl_request(method: str, path: str, body: dict = None) -> dict:
+    url = f"{DIRECTLINE_BASE}{path}"
+    headers = {
+        "Authorization": f"Bearer {DIRECTLINE_SECRET}",
+        "Content-Type": "application/json",
+    }
+    data = json.dumps(body).encode() if body is not None else b""
+    req = urllib_request.Request(url, data=data if method != "GET" else None, headers=headers, method=method)
+    with urllib_request.urlopen(req, timeout=15) as resp:
+        return json.loads(resp.read())
 
 
 def stream_agent_response(session_id: str, user_message: str):
-    """
-    Synchronous generator that streams SSE event dicts for a user message.
-    Yields content events immediately as they arrive from Foundry (true streaming).
-    """
-    previous_response_id = conversation_manager.get_previous_response_id(session_id)
-    current_input = [{"role": "user", "content": user_message}]
+    """Synchronous generator that yields SSE event dicts via Copilot Studio Direct Line."""
+    if not DIRECTLINE_SECRET:
+        yield {"type": "content", "data": {"content": "Chat agent not configured (DIRECTLINE_SECRET missing)."}}
+        return
 
     yield {"type": "status", "data": {"status": "Thinking..."}}
 
-    while True:
-        create_kwargs = dict(
-            input=current_input,
-            stream=True,
-            extra_body={"agent_reference": {"name": agent_name, "type": "agent_reference"}},
-        )
-        if previous_response_id:
-            create_kwargs["previous_response_id"] = previous_response_id
+    try:
+        if session_id not in _dl_sessions:
+            conv = _dl_request("POST", "/conversations")
+            _dl_sessions[session_id] = {"conversation_id": conv["conversationId"], "watermark": None}
 
-        response_id = None
+        session = _dl_sessions[session_id]
+        conv_id = session["conversation_id"]
 
-        with openai_client.responses.create(**create_kwargs) as stream:
-            for event in stream:
-                event_type = getattr(event, "type", "")
-                if event_type == "response.output_text.delta":
-                    delta = getattr(event, "delta", "")
-                    yield {"type": "content", "data": {"content": delta}}
-                elif "oauth_consent" in event_type or "consent_request" in event_type:
-                    url = getattr(event, "url", None) or getattr(getattr(event, "item", None), "url", None)
-                    if url:
-                        yield {"type": "consent_required", "data": {"url": url}}
-                elif event_type == "response.completed":
-                    resp = getattr(event, "response", None)
-                    if resp:
-                        response_id = getattr(resp, "id", None)
+        _dl_request("POST", f"/conversations/{conv_id}/activities", {
+            "type": "message",
+            "from": {"id": "user"},
+            "text": user_message,
+        })
 
-        break
+        deadline = time.time() + 30
+        while time.time() < deadline:
+            watermark = session["watermark"]
+            params = f"?watermark={watermark}" if watermark else ""
+            result = _dl_request("GET", f"/conversations/{conv_id}/activities{params}")
+            session["watermark"] = str(result.get("watermark", watermark or ""))
+            bot_msgs = [
+                a for a in result.get("activities", [])
+                if a.get("from", {}).get("role") == "bot" and a.get("type") == "message"
+            ]
+            if bot_msgs:
+                yield {"type": "content", "data": {"content": bot_msgs[-1].get("text", "")}}
+                return
+            time.sleep(0.75)
+
+        yield {"type": "content", "data": {"content": "Agent response timed out."}}
+
+    except Exception as e:
+        print(f"Direct Line error: {e}")
+        yield {"type": "content", "data": {"content": f"Agent error: {e}"}}
 
 # FastAPI app
 app = FastAPI(title="Insurance Underwriting API", version="1.0.0")
 
-# Include advisor and admin routers
-from advisor_routes import router as advisor_router
-from admin_routes import router as admin_router
-
-app.include_router(advisor_router)
-app.include_router(admin_router)
 
 _cors_origins = os.environ.get("CORS_ORIGINS", "https://wonderful-sand-0867c671e.7.azurestaticapps.net")
 allowed_origins = [o.strip() for o in _cors_origins.split(",")]
@@ -399,8 +382,7 @@ async def root():
 async def health():
   return {
       "status": "healthy",
-      "agent_name": agent_name,
-      "agent_available": AGENT_AVAILABLE
+      "directline_configured": bool(DIRECTLINE_SECRET)
   }
 
 
@@ -443,211 +425,6 @@ async def get_profiles():
 
 # ─── Advisor AI Chat Endpoints ───────────────────────────────────────────────
 
-# Import advisor storage for data enrichment
-from advisor_storage import advisor_storage as _advisor_store
-from models import EscalationTicket, EscalationReason, EscalationPriority
-
-ADVISOR_SYSTEM_PROMPT = """You are Woodgrove AI, an AI assistant for insurance underwriters. You help underwriters manage their practice,
-understand their applicants' risk profiles, and provide data-driven insights for insurance coverage decisions.
-
-You are NOT the applicant's underwriter — you are a tool that helps the underwriter do their job better.
-
-Current date: {today}
-
-## Advisor Profile
-Name: {advisor_name}
-License: {advisor_license}
-Jurisdictions: {advisor_jurisdictions}
-Specializations: {advisor_specializations}
-
-## Applicant Coverage Summary
-{client_summaries}
-
-## Pending Escalations
-{escalation_summaries}
-
-## Upcoming Appointments
-{appointment_summaries}
-
-## Regulatory & Compliance Reference Data
-{regulatory_summaries}
-
-## Approved Insurance Products
-{product_summaries}
-
-## Instructions
-- Use specific applicant names, numbers, and data from the context above.
-- For regulatory questions, specify which jurisdiction (US or CA) applies.
-- When discussing a specific applicant, reference their actual coverage allocation, age, coverage goals, and status.
-- If asked for a daily brief, synthesize today's appointments, pending escalations, and at-risk applicants into actionable insights.
-- For pre-meeting briefs, focus on the specific applicant's coverage snapshot, recent activity, talking points, and underwriting risks.
-- Never invent applicant data that isn't in the context above.
-- Do NOT return JSON — respond in natural language with markdown formatting.
-
-## CRITICAL: Response Format
-You MUST format every response using this exact markdown structure so the frontend can render it as rich cards.
-
-1. Start with a level-2 heading as the response title: `## Title Here`
-2. Use level-3 headings for each section: `### Section Name`
-3. Use bold key-value bullet points for data: `- **Label**: Value`
-4. Use numbered lists with bold prefixes for steps: `1. **Step Name**: Description`
-5. Use plain bullet points for simple lists: `- Item text`
-6. Use plain paragraphs for explanatory text.
-
-Example of a CORRECTLY formatted response:
-
-## US Auto Liability Minimums
-
-### Coverage Requirements
-- **Typical Minimum BI per Person**: $25,000 [REF:us-minimum-liability-auto]
-- **Typical Minimum BI per Occurrence**: $50,000 [REF:us-minimum-liability-auto]
-- **Typical Minimum Property Damage**: $10,000 [REF:us-minimum-liability-auto]
-
-### Important Notes
-- State minimums are a floor — underwriters recommend significantly higher limits for adequate protection
-- Commercial auto follows different rules from personal auto
-
-### Recommended Actions
-1. **Review Applicant Coverage**: Confirm liability limits exceed state minimums
-2. **Flag Under-Insured Cases**: Escalate applicants carrying only minimum limits
-3. **Document Coverage Decisions**: Record all limit election justifications in applicant files
-
-ALWAYS follow this exact format. NEVER use level-1 headings (single #). ALWAYS start with a ## title. Use ### for every section. Use `- **Key**: Value` for any factual data point.
-
-## CRITICAL: Regulatory Citations
-Whenever you reference a specific regulatory rule, contribution limit, tax treatment, withdrawal rule, or government benefit from the Regulatory Reference Data above, you MUST cite it inline using the format: [REF:rule-id]
-
-Examples:
-- "Typical US auto liability minimums are $25,000/$50,000/$10,000 [REF:us-minimum-liability-auto]"
-- "NFIP residential building maximum coverage is $250,000 [REF:us-nfip-flood-requirement]"
-- "OSFI requires a minimum LICAT ratio of 90% for Canadian life insurers [REF:ca-iiroc-life-minimum]"
-
-Always cite the most specific rule. If multiple rules apply, cite each one separately.
-Only use [REF:id] for rules that exist in the Regulatory Reference Data — never fabricate a reference ID.
-"""
-
-
-async def _build_advisor_context(advisor_id: str) -> str:
-    """Build a rich context string with real advisor/client/escalation/appointment data."""
-    from datetime import datetime
-    today = datetime.utcnow().strftime("%Y-%m-%d")
-
-    # Advisor profile
-    advisor = await _advisor_store.get_advisor(advisor_id)
-    advisor_name = advisor.name if advisor else advisor_id
-    advisor_license = advisor.license_number if advisor else "N/A"
-    advisor_jurisdictions = ", ".join([j.value if hasattr(j, 'value') else str(j) for j in (advisor.jurisdictions if advisor else [])])
-    advisor_specializations = ", ".join(advisor.specializations if advisor else [])
-    advisor_jurisdictions_list = [j.value if hasattr(j, 'value') else str(j) for j in (advisor.jurisdictions if advisor else [])]
-
-    # Clients
-    clients = await _advisor_store.get_clients_for_advisor(advisor_id)
-    client_lines = []
-    for c in clients:
-        total_assets = c.investment_assets + c.current_cash
-        jurisdiction = c.jurisdiction.value if hasattr(c.jurisdiction, 'value') else str(c.jurisdiction)
-        status = c.status.value if hasattr(c.status, 'value') else str(c.status)
-        portfolio_str = ", ".join(f"{k}: {v*100:.0f}%" for k, v in (c.portfolio or {}).items())
-        client_lines.append(
-            f"- **{c.name}** (ID: {c.id}) | Age {c.age} | {jurisdiction} | Status: {status} | "
-            f"Risk: {c.risk_appetite} | Assets: ${total_assets:,.0f} (cash ${c.current_cash:,.0f} + invested ${c.investment_assets:,.0f}) | "
-            f"Portfolio: [{portfolio_str}] | Savings rate: {c.yearly_savings_rate*100:.0f}% of ${c.salary:,.0f} salary | "
-            f"Target: retire at {c.target_retire_age}, ${c.target_monthly_income:,.0f}/mo income"
-        )
-    client_summaries = "\n".join(client_lines) if client_lines else "No clients assigned."
-
-    # Escalations
-    escalations = await _advisor_store.get_escalations_for_advisor(advisor_id)
-    esc_lines = []
-    for e in escalations:
-        status = e.status.value if hasattr(e.status, 'value') else str(e.status)
-        priority = e.priority.value if hasattr(e.priority, 'value') else str(e.priority)
-        # Find client name
-        client_name = e.client_id
-        for c in clients:
-            if c.id == e.client_id:
-                client_name = c.name
-                break
-        esc_lines.append(
-            f"- [{priority.upper()}] {client_name}: \"{e.client_question}\" (status: {status}, created: {e.created_at[:10]})"
-        )
-    escalation_summaries = "\n".join(esc_lines) if esc_lines else "No pending escalations."
-
-    # Appointments
-    appointments = await _advisor_store.get_appointments_for_advisor(advisor_id)
-    appt_lines = []
-    for a in appointments:
-        status = a.status.value if hasattr(a.status, 'value') else str(a.status)
-        meeting_type = a.meeting_type.value if hasattr(a.meeting_type, 'value') else str(a.meeting_type)
-        # Find client name
-        client_name = a.client_id
-        for c in clients:
-            if c.id == a.client_id:
-                client_name = c.name
-                break
-        is_today = a.scheduled_at[:10] == today
-        day_label = "TODAY" if is_today else a.scheduled_at[:10]
-        appt_lines.append(
-            f"- [{day_label}] {a.scheduled_at[11:16]} — {client_name} ({meeting_type}, {a.duration_minutes}min, {status})"
-            + (f"\n  Agenda: {a.agenda}" if a.agenda else "")
-        )
-    appointment_summaries = "\n".join(appt_lines) if appt_lines else "No upcoming appointments."
-
-    # Load regulatory rules
-    import os
-    data_dir = os.path.join(os.path.dirname(__file__), "data")
-    regulatory_summaries = "No regulatory data available."
-    try:
-        with open(os.path.join(data_dir, "regulatory_rules.json"), "r") as f:
-            all_rules = json.load(f)
-        # Filter to active rules for advisor's jurisdictions
-        relevant_rules = [r for r in all_rules if r.get("is_active", True) and r.get("jurisdiction") in advisor_jurisdictions_list]
-        rule_lines = []
-        for r in relevant_rules:
-            vals = r.get("current_values", {})
-            vals_str = ", ".join(f"{k}: {v}" for k, v in vals.items())
-            source = r.get("source_url", "")
-            rule_lines.append(
-                f"- **[{r['id']}]** {r['title']} ({r['jurisdiction']}, {r['category']}): {r['description']}\n"
-                f"  Values: {vals_str}\n"
-                f"  Source: {source}\n"
-                f"  Last verified: {r.get('last_verified', 'N/A')}"
-            )
-        regulatory_summaries = "\n".join(rule_lines) if rule_lines else "No regulatory rules for advisor's jurisdictions."
-    except Exception as e:
-        print(f"Warning: Could not load regulatory rules: {e}")
-
-    # Load investment products
-    product_summaries = "No product data available."
-    try:
-        with open(os.path.join(data_dir, "investment_products.json"), "r") as f:
-            products_data = json.load(f)
-        product_lines = []
-        for risk_level, products in products_data.get("products_by_risk", {}).items():
-            for p in products:
-                product_lines.append(
-                    f"- [{risk_level.upper()}] {p['name']}: {p['description']} "
-                    f"(exp. return: {p['exp_return']*100:.1f}%, expense ratio: {p['expense_ratio']*100:.2f}%, "
-                    f"min investment: ${p['minimum_investment']:,})"
-                )
-        product_summaries = "\n".join(product_lines) if product_lines else "No products in catalog."
-    except Exception as e:
-        print(f"Warning: Could not load investment products: {e}")
-
-    return ADVISOR_SYSTEM_PROMPT.format(
-        today=today,
-        advisor_name=advisor_name,
-        advisor_license=advisor_license,
-        advisor_jurisdictions=advisor_jurisdictions,
-        advisor_specializations=advisor_specializations,
-        client_summaries=client_summaries,
-        escalation_summaries=escalation_summaries,
-        appointment_summaries=appointment_summaries,
-        regulatory_summaries=regulatory_summaries,
-        product_summaries=product_summaries,
-    )
-
-
 class AdvisorChatRequest(BaseModel):
     message: str
     advisor_id: str
@@ -655,225 +432,6 @@ class AdvisorChatRequest(BaseModel):
     history: Optional[List[ChatMessage]] = []
     skip_mcp: bool = False  # Skip MCP KB lookup; use AI agent directly (for generation tasks)
 
-
-class PreMeetingBriefRequest(BaseModel):
-    advisor_id: str
-    client_id: str
-    appointment_id: str
-
-
-PRE_MEETING_BRIEF_PROMPT = """Using the client data and context above, generate a structured pre-meeting brief for the upcoming appointment with client "{client_id}" (appointment "{appointment_id}").
-
-You MUST respond with ONLY valid JSON (no markdown, no code fences, no extra text). The JSON must follow this exact schema:
-
-{{
-  "client_summary": "A 2-3 sentence overview of the client's situation and retirement readiness.",
-  "financial_snapshot": {{
-    "total_assets": <number>,
-    "invested_assets": <number>,
-    "cash_reserves": <number>,
-    "annual_savings": <number>,
-    "savings_rate_percent": <number>,
-    "portfolio_allocation": {{ "stocks": <percent>, "bonds": <percent>, ... }},
-    "goal_progress_percent": <number 0-100>,
-    "risk_score": <number 0-100>,
-    "key_concerns": ["concern1", "concern2"]
-  }},
-  "talking_points": [
-    {{
-      "title": "Short topic title",
-      "detail": "1-2 sentence explanation of what to discuss",
-      "priority": "high" | "medium" | "low",
-      "category": "performance" | "contribution" | "tax" | "risk" | "planning" | "regulatory"
-    }}
-  ],
-  "risks": [
-    {{
-      "title": "Risk title",
-      "detail": "Brief risk description",
-      "severity": "high" | "medium" | "low"
-    }}
-  ],
-  "opportunities": [
-    {{
-      "title": "Opportunity title",
-      "detail": "Brief description of the opportunity",
-      "impact": "high" | "medium" | "low"
-    }}
-  ],
-  "meeting_agenda": [
-    "Agenda item 1",
-    "Agenda item 2"
-  ],
-  "regulatory_considerations": [
-    {{
-      "rule_id": "rule-id-if-applicable",
-      "title": "Rule or consideration title",
-      "detail": "Brief explanation of relevance to this client"
-    }}
-  ],
-  "recent_activity": {{
-    "scenarios_explored": ["scenario1", "scenario2"],
-    "questions_asked": ["question1", "question2"],
-    "last_login": "ISO date string or 'Unknown'"
-  }}
-}}
-
-Use REAL data from the client context above. Calculate goal_progress_percent using the 4% rule (target_monthly_income * 12 * 25 = target fund).
-Provide 3-5 talking points, 2-4 risks, 2-4 opportunities, and 4-6 agenda items.
-All numbers should be actual numbers (not strings). All arrays should have at least one item.
-Respond with ONLY the JSON object — no explanation, no markdown."""
-
-
-@app.post("/advisor/pre-meeting-brief")
-async def generate_pre_meeting_brief_endpoint(request: PreMeetingBriefRequest):
-    """Generate a structured pre-meeting brief using the LLM."""
-    try:
-        system_prompt = await _build_advisor_context(request.advisor_id)
-        user_message = PRE_MEETING_BRIEF_PROMPT.format(
-            client_id=request.client_id,
-            appointment_id=request.appointment_id,
-        )
-
-        full_message = f"SYSTEM CONTEXT:\n{system_prompt}\n\n---\n\n{user_message}"
-        loop = asyncio.get_event_loop()
-        events = await loop.run_in_executor(
-            None, lambda: list(stream_agent_response("brief_session", full_message))
-        )
-        raw = "".join(e["data"].get("content", "") for e in events if e["type"] == "content").strip()
-        # Strip markdown code fences if the LLM added them despite instructions
-        if raw.startswith("```"):
-            raw = raw.split("\n", 1)[1] if "\n" in raw else raw[3:]
-            if raw.endswith("```"):
-                raw = raw[:-3]
-            raw = raw.strip()
-
-        brief_data = json.loads(raw)
-        brief_data["id"] = f"brief-{request.appointment_id}"
-        brief_data["appointment_id"] = request.appointment_id
-        brief_data["generated_at"] = datetime.utcnow().isoformat() + "Z"
-
-        return brief_data
-
-    except json.JSONDecodeError as e:
-        print(f"Pre-meeting brief JSON parse error: {e}\nRaw response: {handler.text[:500]}")
-        raise HTTPException(status_code=502, detail="LLM returned invalid JSON for pre-meeting brief")
-    except Exception as e:
-        print(f"Pre-meeting brief error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-
-class ScenarioAnalysisRequest(BaseModel):
-    advisor_id: str
-    clients: List[Dict[str, Any]]
-    scenario_type: str
-    scenario_description: str
-    scenario_params: Dict[str, Any]
-
-
-SCENARIO_ANALYSIS_PROMPT = """Using the advisor context above and the client data provided below, run a "{scenario_description}" scenario analysis.
-
-Scenario type: {scenario_type}
-Parameters: {scenario_params}
-
-Clients to analyze:
-{client_summaries}
-
-You MUST respond with ONLY valid JSON (no markdown, no code fences, no extra text). The JSON must follow this exact schema:
-
-{{
-  "headline": "<Short 5-8 word headline summarizing the overall scenario outcome>",
-  "overall_summary": "<2-3 sentence summary of cross-client insights and the overall impact of this scenario>",
-  "overall_recommendation": "<1-2 sentence portfolio-wide recommendation for the advisor>",
-  "client_analyses": [
-    {{
-      "client_id": "<client id>",
-      "client_name": "<client name>",
-      "current_outlook": {{
-        "success_rate": <number 0-100>,
-        "monthly_income": <number>,
-        "assessment": "<1 sentence current outlook summary>"
-      }},
-      "scenario_impact": {{
-        "direction": "positive" | "negative" | "neutral",
-        "success_rate_change": <number, can be negative>,
-        "new_success_rate": <number 0-100>,
-        "income_change": <number, can be negative>,
-        "new_monthly_income": <number>,
-        "summary": "<1-2 sentence description of impact>"
-      }},
-      "risk_level": "high" | "medium" | "low",
-      "recommendation": "<1-2 sentence specific actionable advice for this client>"
-    }}
-  ],
-  "key_insights": [
-    {{
-      "title": "<3-6 word insight title>",
-      "detail": "<1 sentence explanation>",
-      "type": "warning" | "info" | "success"
-    }}
-  ],
-  "suggested_actions": [
-    {{
-      "action": "<Specific action the advisor should take>",
-      "priority": "high" | "medium" | "low",
-      "affected_clients": ["<client_id1>", "<client_id2>"]
-    }}
-  ]
-}}
-
-Use realistic financial projections based on actual portfolio allocations, savings rates, and time horizons.
-Provide analysis for ALL clients listed above.
-All numbers should be actual numbers (not strings).
-Respond with ONLY the JSON object."""
-
-
-@app.post("/advisor/scenario-analysis")
-async def generate_scenario_analysis_endpoint(request: ScenarioAnalysisRequest):
-    """Generate a structured cross-client scenario analysis using the LLM."""
-    try:
-        system_prompt = await _build_advisor_context(request.advisor_id)
-
-        client_summaries = "\n".join([
-            f"- {c.get('name', c.get('id', 'Unknown'))} (ID: {c.get('id', 'unknown')}): "
-            f"age {c.get('age', 'N/A')}, {c.get('jurisdiction', 'N/A')}, "
-            f"{c.get('risk_appetite', 'medium')} risk, "
-            f"${c.get('investment_assets', 0) + c.get('current_cash', 0):,.0f} total assets, "
-            f"portfolio [{', '.join(f'{k}: {v*100:.0f}%' for k, v in c.get('portfolio', {}).items())}], "
-            f"saves {c.get('yearly_savings_rate', 0)*100:.0f}% of ${c.get('salary', 0):,.0f}, "
-            f"target retire at {c.get('target_retire_age', 65)} with ${c.get('target_monthly_income', 0):,.0f}/mo"
-            for c in request.clients
-        ])
-
-        user_message = SCENARIO_ANALYSIS_PROMPT.format(
-            scenario_description=request.scenario_description,
-            scenario_type=request.scenario_type,
-            scenario_params=json.dumps(request.scenario_params),
-            client_summaries=client_summaries,
-        )
-
-        full_message = f"SYSTEM CONTEXT:\n{system_prompt}\n\n---\n\n{user_message}"
-        loop = asyncio.get_event_loop()
-        events = await loop.run_in_executor(
-            None, lambda: list(stream_agent_response("scenario_session", full_message))
-        )
-        raw = "".join(e["data"].get("content", "") for e in events if e["type"] == "content").strip()
-        if raw.startswith("```"):
-            raw = raw.split("\n", 1)[1] if "\n" in raw else raw[3:]
-            if raw.endswith("```"):
-                raw = raw[:-3]
-            raw = raw.strip()
-
-        analysis_data = json.loads(raw)
-        return analysis_data
-
-    except json.JSONDecodeError as e:
-        print(f"Scenario analysis JSON parse error: {e}\nRaw response: {raw[:500] if 'raw' in dir() else 'N/A'}")
-        raise HTTPException(status_code=502, detail="LLM returned invalid JSON for scenario analysis")
-    except Exception as e:
-        print(f"Scenario analysis error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 def _load_regulatory_rules_map() -> Dict[str, Dict]:
@@ -1264,58 +822,13 @@ async def _query_sage_kb_mcp(
     raise MCPQueryError(last_error)
 
 
-@app.post("/advisor/chat")
-async def advisor_chat(request: AdvisorChatRequest):
-    """Non-streaming advisor chat with real LLM and enriched context."""
-    try:
-        # Check if agent is available
-        if not AGENT_AVAILABLE:
-            raise HTTPException(
-                status_code=503,
-                detail="AI agent service is temporarily unavailable (tenant configuration issue). Please try again later."
-            )
-
-        system_prompt = await _build_advisor_context(request.advisor_id)
-        full_message = f"SYSTEM CONTEXT:\n{system_prompt}\n\n---\n\nADVISOR QUESTION:\n{request.message}"
-        loop = asyncio.get_event_loop()
-        events = await loop.run_in_executor(
-            None, lambda: list(stream_agent_response(f"advisor_{request.advisor_id}", full_message))
-        )
-        raw = "".join(e["data"].get("content", "") for e in events if e["type"] == "content")
-        clean_text, citations = _extract_citations(raw)
-        return {"response": clean_text, "citations": citations}
-
-    except Exception as e:
-        print(f"Advisor chat error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @app.post("/advisor/chat/stream")
 async def advisor_chat_stream(request: AdvisorChatRequest):
-    """Streaming advisor chat — sends SSE events with type 'content' and 'complete'."""
+    """Streaming advisor chat via Copilot Studio Direct Line."""
     try:
-        # Check if agent is available for fallback
-        if not AGENT_AVAILABLE:
-            raise HTTPException(
-                status_code=503,
-                detail="AI agent service is temporarily unavailable (tenant configuration issue). Please try again later."
-            )
-
-        system_prompt = await _build_advisor_context(request.advisor_id)
-        history_text = ""
-        if request.history:
-            for msg in request.history[-10:]:
-                role_label = "Underwriter" if msg.role == "user" else "Woodgrove AI"
-                history_text += f"{role_label}: {msg.content}\n\n"
-
-        full_message = f"SYSTEM CONTEXT:\n{system_prompt}\n\n"
-        if history_text:
-            full_message += f"CONVERSATION HISTORY:\n{history_text}\n---\n\n"
-        full_message += f"ADVISOR QUESTION:\n{request.message}"
-
         def generate():
             accumulated = ""
-            for ev in stream_agent_response(f"advisor_{request.advisor_id}", full_message):
+            for ev in stream_agent_response(f"advisor_{request.advisor_id}", request.message):
                 if ev["type"] == "content":
                     accumulated += ev["data"].get("content", "")
                     yield f"data: {json.dumps({'type': 'content', 'data': ev['data'].get('content', '')})}\n\n"
@@ -1910,48 +1423,6 @@ def _map_share_to_advisor_scenario(record: ScenarioShareRecord) -> Dict[str, Any
     }
 
 
-@app.post("/api/scenario-consent/{user_id}")
-async def submit_scenario_consent(user_id: str, request: ScenarioConsentRequest):
-    """Persist consent decision and create an advisor escalation on acceptance."""
-    consent_status = (request.consent_status or "").strip().lower()
-    if consent_status not in {"accepted", "rejected"}:
-        raise HTTPException(status_code=400, detail="consent_status must be 'accepted' or 'rejected'")
-
-    advisor_id = _resolve_advisor_id_for_user(user_id, request.advisor_id)
-    if not advisor_id:
-        raise HTTPException(status_code=400, detail="No advisor assigned to user")
-
-    escalation_id = None
-    if consent_status == "accepted":
-        escalation = EscalationTicket(
-            client_id=user_id,
-            advisor_id=advisor_id,
-            reason=EscalationReason.USER_REQUESTED,
-            context_summary=(
-                "Client consented to share a complex scenario analysis and requested advisor review "
-                "for follow-up discussion."
-            ),
-            client_question=request.scenario_description,
-            priority=EscalationPriority.MEDIUM,
-        )
-        escalation_id = await _advisor_store.save_escalation(escalation)
-
-    record = ScenarioShareRecord(
-        user_id=user_id,
-        advisor_id=advisor_id,
-        scenario_description=request.scenario_description,
-        analysis_payload=request.analysis_payload or {},
-        consent_status=consent_status,
-        escalation_id=escalation_id,
-    )
-    record_id = await storage.save_scenario_share(record)
-
-    return {
-        "id": record_id,
-        "consent_status": consent_status,
-        "advisor_id": advisor_id,
-        "escalation_id": escalation_id,
-    }
 
 
 @app.get("/api/shared-scenarios/{advisor_id}/{client_id}")
