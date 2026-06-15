@@ -10,9 +10,9 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "pydantic>=2.5.0",
     "azure-identity>=1.15.0",
-    "azure-ai-projects>=2.1.0",
     "azure-core>=1.29.5",
-    "openai>=1.30.0",
+    "microsoft-agents-copilotstudio-client>=1.0.0",
+    "msal>=1.31.0",
 ]
 
 [project.optional-dependencies]
