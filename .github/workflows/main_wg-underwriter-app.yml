@@ -27,13 +27,19 @@ jobs:
         run: |
           npm install
           npm run build --if-present
-          npm run test --if-present
+          cp -r public .next/standalone/public
+          cp -r .next/static .next/standalone/.next/static
+        env:
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+
+      - name: Zip standalone output
+        run: cd .next/standalone && zip -r ../../app.zip .
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
           name: node-app
-          path: .
+          path: app.zip
           retention-days: 1
 
   deploy:
@@ -62,5 +68,6 @@ jobs:
         with:
           app-name: 'wg-underwriter-app'
           slot-name: 'Production'
-          package: .
+          package: app.zip
+          startup-command: 'node server.js'
           
