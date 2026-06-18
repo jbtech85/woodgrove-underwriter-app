@@ -8,7 +8,6 @@ import json
 import asyncio
 import uuid
 import re
-import base64
 from typing import Any, List, Dict, Optional
 from pathlib import Path
 
@@ -29,15 +28,6 @@ except ImportError:
 from microsoft_agents.copilotstudio.client import CopilotClient, ConnectionSettings, StartRequest
 from microsoft_agents.activity import ActivityTypes
 import msal
-
-def _decode_token_claims(token: str) -> dict:
-    try:
-        payload = token.split(".")[1]
-        payload += "=" * (4 - len(payload) % 4)
-        return json.loads(base64.urlsafe_b64decode(payload))
-    except Exception:
-        return {}
-
 
 # Data directory
 DATA_DIR = Path(__file__).parent / "data"
@@ -117,8 +107,6 @@ async def _get_copilot_token(user_access_token: str) -> str:
     msal_app = _get_msal_app()
     if not msal_app:
         raise RuntimeError("Copilot Studio auth not configured (missing AZURE_CLIENT_ID/SECRET/TENANT_ID)")
-    claims = _decode_token_claims(user_access_token)
-    print(f"[OBO] token aud={claims.get('aud')} iss={claims.get('iss')} scp={claims.get('scp')} len={len(user_access_token)}")
     result = await asyncio.to_thread(
         msal_app.acquire_token_on_behalf_of,
         user_assertion=user_access_token,
@@ -159,6 +147,7 @@ async def stream_copilot_response(session_id: str, user_message: str, user_acces
         conv_id = _cs_sessions[session_id]
         accumulated = ""
         async for activity in client.ask_question(user_message, conv_id):
+            print(f"[Activity] type={activity.type} text={str(activity.text)[:80] if activity.text else None}")
             if activity.type == ActivityTypes.message and activity.text:
                 accumulated += activity.text
                 yield {"type": "content", "data": {"content": activity.text}}
