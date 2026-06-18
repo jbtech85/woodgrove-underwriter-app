@@ -147,7 +147,7 @@ async def stream_copilot_response(session_id: str, user_message: str, user_acces
         conv_id = _cs_sessions[session_id]
         accumulated = ""
         async for activity in client.ask_question(user_message, conv_id):
-            print(f"[Activity] type={activity.type} text={str(activity.text)[:80] if activity.text else None}")
+            print(f"[Activity] type={activity.type} text={str(activity.text)[:80] if activity.text else None} value={str(activity.value)[:80] if activity.value else None} attachments={len(activity.attachments) if activity.attachments else 0}")
             if activity.type == ActivityTypes.message and activity.text:
                 accumulated += activity.text
                 yield {"type": "content", "data": {"content": activity.text}}
