@@ -114,7 +114,16 @@ export function UWTriagePage({ onSceneChange }: UWTriagePageProps) {
                     <span>{sub.aiRecommendation}</span>
                   </div>
                 </div>
-                <ChevronRight className="w-5 h-5 text-gray-400 shrink-0 mt-1" />
+                <div className="flex flex-col items-end gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={e => e.stopPropagation()}
+                    className="text-xs text-indigo-600 border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 rounded-lg px-2.5 py-1 transition-colors font-medium"
+                  >
+                    Refer
+                  </button>
+                  <ChevronRight className="w-5 h-5 text-gray-400" />
+                </div>
               </div>
             </div>
           ))}
@@ -169,6 +178,12 @@ export function UWTriagePage({ onSceneChange }: UWTriagePageProps) {
                     <span>{sub.aiRecommendation}</span>
                   </div>
                 </div>
+                <button
+                  type="button"
+                  className="text-xs text-indigo-600 border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 rounded-lg px-2.5 py-1 transition-colors font-medium shrink-0 self-start"
+                >
+                  Refer
+                </button>
               </div>
             </div>
           ))}
