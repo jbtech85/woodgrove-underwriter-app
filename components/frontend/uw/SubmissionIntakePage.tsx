@@ -139,21 +139,34 @@ export function SubmissionIntakePage({ onBack }: SubmissionIntakePageProps) {
             <div className="w-8 h-8 rounded-lg bg-white border border-indigo-100 flex items-center justify-center shadow-sm">
               <span className="text-xs font-bold text-indigo-700">F</span>
             </div>
-            <div>
-              <h3 className="text-sm font-semibold text-indigo-900">Azure AI Foundry · Multi-Agent Orchestration</h3>
-              <p className="text-xs text-indigo-600">Submission intake pipeline running automatically</p>
-            </div>
-            <div className="ml-auto">
+            <div className="flex items-center">
+              <div>
+                <h3 className="text-sm font-semibold text-indigo-900">Azure AI Foundry · Multi-Agent Orchestration</h3>
+                <p className="text-xs text-indigo-600">Submission intake pipeline running automatically</p>
+              </div>
               {orchestrationComplete ? (
-                <span className="flex items-center gap-1.5 text-xs text-green-700 bg-green-50 border border-green-200 rounded-full px-3 py-1">
+                <span className="flex items-center gap-1.5 text-xs text-green-700 bg-green-50 border border-green-200 rounded-full px-3 py-1 shrink-0 ml-[20px]">
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   Complete
                 </span>
               ) : (
-                <span className="flex items-center gap-1.5 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-3 py-1">
+                <span className="flex items-center gap-1.5 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-3 py-1 shrink-0 ml-[20px]">
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   Running
                 </span>
+              )}
+            </div>
+            <div className="ml-auto shrink-0">
+              {orchestrationComplete && (
+                <a
+                  href="https://ai.azure.com/nextgen/r/m2wG4YAESyebC7dRu1CRxA,rg-finance-app-5726,,finance-app-5726-resource,finance-app-5726/agents/woodgrove-underwriting-agent/preview?version=26"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 bg-[#643fb2] hover:bg-[#52339a] text-white text-sm font-medium rounded-lg px-4 py-2 transition-colors"
+                >
+                  Deep Research with Foundry
+                  <ExternalLink className="w-4 h-4" />
+                </a>
               )}
             </div>
           </div>
