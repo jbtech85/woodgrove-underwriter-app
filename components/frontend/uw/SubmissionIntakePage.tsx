@@ -216,7 +216,7 @@ export function SubmissionIntakePage({ onBack }: SubmissionIntakePageProps) {
                   <p className="text-xs text-emerald-700 mt-0.5">1,200 locations · ACORD fields mapped · Ready for PAS upload</p>
                 </div>
                 <a
-                  href="https://www.bing.com"
+                  href="https://woodgrovefs1.sharepoint.com/sites/Underwriting/Shared%20Documents/Knowledge%20Base/Accounts/Fabrikam/Fabrikam_LossRun_5yr.xlsx?web=1&xsdata=MDV8MDJ8fGFiY2M2YzIyMWE2YTRiZGZiZTczMDhkZWNlMjRjNjlkfGUwZTFlMDg2ZWQ3YjQxNTY4Y2U1NTY5NDQzMmM2ZGY1fDB8MHw2MzkxNzQ4NTQ0Nzk1NjAzMDd8VW5rbm93bnxWR1ZoYlhOVFpXTjFjbWwwZVZObGNuWnBZMlY4ZXlKRFFTSTZJbFJsWVcxelgwRlVVRk5sY25acFkyVmZVMUJQVEU5R0lpd2lWaUk2SWpBdU1DNHdNREF3SWl3aVVDSTZJbGRwYmpNeUlpd2lRVTRpT2lKUGRHaGxjaUlzSWxkVUlqb3hNWDA9fDF8TDJOb1lYUnpMekU1T21VNU56WTVNemhtTFdRMU4yWXRORGRoWlMwNU9ERm1MV1F3TUdRek1UWXdOekJpTVY5bFpUSmhNamczTWkxaFlXVTBMVFJrWlRFdFlUWXlPUzAwWVdZd1pXTTNPVFE1TkRkQWRXNXhMbWRpYkM1emNHRmpaWE12YldWemMyRm5aWE12TVRjNE1UZzRPRFkwTmpNeE5nPT18YWQzOTRhZGRhOWFjNDdiYjQ3N2IwOGRlY2UyNGM2OWR8MzRkYjc0NzM0MGI5NGU1N2EwZDM1ZjFmYzZlNTAzM2Q%3D&sdata=bmt4ZG1IWlY0ei9LSFk1Q3R0UHZMekRJMFZEVUFZTnd1WGQ5ejQ0ejkwUT0%3D&ovuser=e0e1e086-ed7b-4156-8ce5-5694432c6df5%2CJoshB%403sharp.com"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg px-4 py-2 transition-colors shrink-0"

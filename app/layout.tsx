@@ -3,8 +3,8 @@ import type { Metadata } from "next"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "Woodgrove IRM",
-  description: "AI-powered institutional relational manager platform",
+  title: "Woodgrove Insurance",
+  description: "AI-powered insurance underwriter platform",
 }
 
 export default function RootLayout({
