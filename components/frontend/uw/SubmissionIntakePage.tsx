@@ -238,13 +238,6 @@ export function SubmissionIntakePage({ onBack }: SubmissionIntakePageProps) {
               {/* Panel header */}
               <div className="px-4 py-3.5 border-b border-gray-100 bg-gradient-to-r from-indigo-50 to-blue-50">
                 <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-white border border-indigo-100 flex items-center justify-center shadow-sm shrink-0">
-                    <span className="text-xs font-bold text-indigo-700">F</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-semibold text-indigo-900">Azure AI Foundry</h3>
-                    <p className="text-xs text-indigo-600">Multi-Agent Orchestration</p>
-                  </div>
                   {orchestrationComplete ? (
                     <span className="flex items-center gap-1 text-xs text-green-700 bg-green-50 border border-green-200 rounded-full px-2.5 py-1 shrink-0">
                       <CheckCircle2 className="w-3 h-3" />
@@ -256,7 +249,7 @@ export function SubmissionIntakePage({ onBack }: SubmissionIntakePageProps) {
                       Running
                     </span>
                   )}
-                </div>
+                  
                 {orchestrationComplete && (
                   <a
                     href={FOUNDRY_URL}
@@ -264,10 +257,11 @@ export function SubmissionIntakePage({ onBack }: SubmissionIntakePageProps) {
                     rel="noopener noreferrer"
                     className="flex items-center justify-center gap-2 bg-[#643fb2] hover:bg-[#52339a] text-white text-sm font-medium rounded-lg px-4 py-2 transition-colors w-full mt-3"
                   >
-                    Deep Research with Foundry
+                    Deep Research Agent
                     <ExternalLink className="w-4 h-4" />
                   </a>
                 )}
+                </div>
               </div>
 
               {/* Agent cards — single column */}

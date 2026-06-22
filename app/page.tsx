@@ -19,11 +19,6 @@ import { AdvisorChatView } from "@/components/frontend/advisor/AdvisorChatView"
 // import { PhoneCallSimulator } from "@/components/frontend/irm/PhoneCallSimulator"
 // import { CoworkPanel } from "@/components/frontend/irm/CoworkPanel"
 
-const NAV_TABS: { label: string; scenes: UWScene[]; target: UWScene }[] = [
-  { label: 'Dashboard', scenes: ['dashboard', 'triage', 'submission-intake'], target: 'dashboard' },
-  { label: 'Daily Tasks', scenes: ['daily-tasks'], target: 'daily-tasks' },
-  { label: 'Wrap-Up', scenes: ['wrap-up'], target: 'wrap-up' },
-]
 
 const SCENE_TIMES: Record<UWScene, string> = {
   dashboard: '8:05 AM',
@@ -179,26 +174,6 @@ export default function UWApp() {
         </div>
       </header>
 
-      {/* Secondary nav — Eva persona only */}
-      {persona === 'eva' && (
-        <nav className="bg-white border-b border-gray-100 flex-shrink-0">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 flex">
-            {NAV_TABS.map(tab => (
-              <button
-                key={tab.label}
-                onClick={() => setScene(tab.target)}
-                className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
-                  tab.scenes.includes(scene)
-                    ? 'border-indigo-600 text-indigo-700'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-200'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </nav>
-      )}
 
       {/* Main content + agent sidebar */}
       <div className="flex-1 flex overflow-hidden">
