@@ -214,11 +214,12 @@ async def fabric_query(request: dict):
 async def advisor_chat_stream(request: AdvisorChatRequest, http_request: FastAPIRequest):
     """Streaming advisor chat via Copilot Studio M365 Agents SDK."""
     user_token = http_request.headers.get("x-user-token", "")
+    user_id = http_request.headers.get("x-user-id", "default")
 
     async def generate():
         accumulated = ""
         async for ev in stream_copilot_response(
-            f"advisor_{request.advisor_id}", request.message, user_token
+            f"advisor_{request.advisor_id}_{user_id}", request.message, user_token
         ):
             if ev["type"] == "content":
                 accumulated += ev["data"].get("content", "")

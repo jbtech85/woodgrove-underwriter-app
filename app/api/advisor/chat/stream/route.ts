@@ -9,12 +9,14 @@ export async function POST(request: NextRequest) {
   // Easy Auth injects this server-side header when the user is signed in
   const headersList = await headers()
   const userToken = headersList.get("x-ms-token-aad-access-token") || ""
+  const userId = headersList.get("x-ms-client-principal-id") || ""
 
   const backendRes = await fetch(`${API_URL}/advisor/chat/stream`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "x-user-token": userToken,
+      "x-user-id": userId,
     },
     body,
   })
