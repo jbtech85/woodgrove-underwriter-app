@@ -1,20 +1,35 @@
 'use client'
 
 import { useState } from 'react'
-import { AlertCircle, FileText, Clock, Shield, ChevronDown, CheckCircle2 } from 'lucide-react'
+import { AlertCircle, FileText, Clock, Shield, ChevronDown, ChevronUp, CheckCircle2 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { UWScene } from '@/lib/uwTypes'
 import { PORTFOLIO_METRICS } from '@/lib/uwData'
 
 interface UWDashboardProps {
   onSceneChange: (scene: UWScene) => void
+  onOpenDocQA?: () => void
 }
 
 const m = PORTFOLIO_METRICS.morning
 
 type Status = 'urgent' | 'pending' | 'in-review' | 'quoted'
-type SortKey = 'urgency' | 'dateReceived' | 'insured'
-type Category = 'submission' | 'servicing' | 'renewal'
+type SortCol = 'urgency' | 'insured' | 'line' | 'sumInsured' | 'effectiveDate' | 'dateReceived'
+type SortDir = 'asc' | 'desc'
+type Category = 'submission' | 'servicing' | 'renewal' | 'referral'
+
+const DEFAULT_DIR: Record<SortCol, SortDir> = {
+  urgency: 'asc',
+  insured: 'asc',
+  line: 'asc',
+  sumInsured: 'desc',
+  effectiveDate: 'desc',
+  dateReceived: 'desc',
+}
+
+function parseMillion(s: string): number {
+  return parseFloat(s.replace('$', '').replace('M', ''))
+}
 
 interface DashDoc { label: string; received: boolean }
 interface DashRow {
@@ -34,11 +49,16 @@ interface DashRow {
 
 const URGENCY_ORDER: Record<Status, number> = { urgent: 0, 'in-review': 1, pending: 2, quoted: 3 }
 
-function sortRows(rows: DashRow[], key: SortKey): DashRow[] {
+function sortRows(rows: DashRow[], col: SortCol, dir: SortDir): DashRow[] {
   return [...rows].sort((a, b) => {
-    if (key === 'urgency') return URGENCY_ORDER[a.status] - URGENCY_ORDER[b.status]
-    if (key === 'dateReceived') return b.dateReceived.localeCompare(a.dateReceived)
-    return a.insured.localeCompare(b.insured)
+    let cmp = 0
+    if (col === 'urgency') cmp = URGENCY_ORDER[a.status] - URGENCY_ORDER[b.status]
+    else if (col === 'insured') cmp = a.insured.localeCompare(b.insured)
+    else if (col === 'line') cmp = a.line.localeCompare(b.line)
+    else if (col === 'sumInsured') cmp = parseMillion(a.requestedLimit) - parseMillion(b.requestedLimit)
+    else if (col === 'effectiveDate') cmp = new Date(a.effectiveDate).getTime() - new Date(b.effectiveDate).getTime()
+    else if (col === 'dateReceived') cmp = a.dateReceived.localeCompare(b.dateReceived)
+    return dir === 'desc' ? -cmp : cmp
   })
 }
 
@@ -86,7 +106,7 @@ const ALL_SUBMISSIONS: DashRow[] = [
   },
   {
     id: 'metro', insured: 'Metro Warehouse Complex', broker: 'WG Premier Brokers', line: 'Property + Equipment Breakdown', industry: 'Warehousing',
-    category: 'submission', dateReceived: '2026-06-09', effectiveDate: 'Aug 1, 2026', requestedLimit: '$20M',
+    category: 'referral', dateReceived: '2026-06-09', effectiveDate: 'Aug 1, 2026', requestedLimit: '$20M',
     status: 'in-review',
     docs: [
       { label: 'ACORD 125', received: true },
@@ -165,7 +185,7 @@ const ALL_SUBMISSIONS: DashRow[] = [
   },
   {
     id: 'ren-metro', insured: 'Metro Warehouse Complex', broker: 'WG Premier Brokers', line: 'Property + Equipment', industry: 'Warehousing',
-    category: 'renewal', dateReceived: '2026-06-06', effectiveDate: 'Sep 1, 2026', requestedLimit: '$20M',
+    category: 'referral', dateReceived: '2026-06-06', effectiveDate: 'Sep 1, 2026', requestedLimit: '$20M',
     status: 'pending',
     docs: [
       { label: 'Renewal Application', received: true },
@@ -175,7 +195,7 @@ const ALL_SUBMISSIONS: DashRow[] = [
   },
   {
     id: 'ren-pinnacle', insured: 'Pinnacle State Campus', broker: 'Adatum', line: 'Commercial Property', industry: 'Education',
-    category: 'renewal', dateReceived: '2026-06-08', effectiveDate: 'Sep 15, 2026', requestedLimit: '$8M',
+    category: 'referral', dateReceived: '2026-06-08', effectiveDate: 'Sep 15, 2026', requestedLimit: '$8M',
     status: 'pending',
     docs: [
       { label: 'Renewal Application', received: true },
@@ -243,13 +263,15 @@ function CategoryChip({
     submission: 'bg-blue-50 text-blue-700 border-blue-200',
     servicing: 'bg-purple-50 text-purple-700 border-purple-200',
     renewal: 'bg-teal-50 text-teal-700 border-teal-200',
+    referral: 'bg-orange-50 text-orange-700 border-orange-200',
   }
   const activated: Record<Category, string> = {
     submission: 'bg-blue-100 text-blue-800 border-blue-400 ring-1 ring-blue-400 ring-offset-1',
     servicing: 'bg-purple-100 text-purple-800 border-purple-400 ring-1 ring-purple-400 ring-offset-1',
     renewal: 'bg-teal-100 text-teal-800 border-teal-400 ring-1 ring-teal-400 ring-offset-1',
+    referral: 'bg-orange-100 text-orange-800 border-orange-400 ring-1 ring-orange-400 ring-offset-1',
   }
-  const labels: Record<Category, string> = { submission: 'Submission', servicing: 'Servicing', renewal: 'Renewal' }
+  const labels: Record<Category, string> = { submission: 'Submission', servicing: 'Servicing', renewal: 'Renewal', referral: 'Referral' }
   const cls = `text-xs font-medium rounded-full px-2.5 py-0.5 border whitespace-nowrap transition-all ${active ? activated[category] : base[category]}`
 
   if (onClick) {
@@ -262,12 +284,16 @@ function CategoryChip({
   return <span className={cls}>{labels[category]}</span>
 }
 
-export function UWDashboard({ onSceneChange }: UWDashboardProps) {
-  const [sort, setSort] = useState<SortKey>('urgency')
+export function UWDashboard({ onSceneChange, onOpenDocQA }: UWDashboardProps) {
+  const [sortCol, setSortCol] = useState<SortCol>('urgency')
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [filterCategory, setFilterCategory] = useState<Category | null>(null)
   const [openDocRow, setOpenDocRow] = useState<string | null>(null)
+  const [showQAModal, setShowQAModal] = useState(false)
 
-  const sorted = sortRows(ALL_SUBMISSIONS, sort)
+  const fabRow = ALL_SUBMISSIONS.find(r => r.id === 'fab')!
+
+  const sorted = sortRows(ALL_SUBMISSIONS, sortCol, sortDir)
   const displayed = filterCategory ? sorted.filter(r => r.category === filterCategory) : sorted
 
   function toggleFilter(cat: Category) {
@@ -275,7 +301,17 @@ export function UWDashboard({ onSceneChange }: UWDashboardProps) {
     setOpenDocRow(null)
   }
 
+  function handleColSort(col: SortCol) {
+    if (sortCol === col) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortCol(col)
+      setSortDir(DEFAULT_DIR[col])
+    }
+  }
+
   return (
+    <>
     <div className="h-full overflow-y-auto bg-gray-50" style={{ scrollbarGutter: 'stable' }}>
       <div className="max-w-7xl mx-auto px-6 py-6">
 
@@ -308,7 +344,7 @@ export function UWDashboard({ onSceneChange }: UWDashboardProps) {
 
         {/* KPI row */}
         <div className="grid grid-cols-4 gap-4 mb-6">
-          <KPICard label="Open Submissions" value={String(m.submissionsTotal)} detail={`${m.pendingDecisions} require decision today`} icon={FileText} iconColor="text-indigo-500" iconBg="bg-indigo-50" />
+          <KPICard label="Open Activities" value={String(m.submissionsTotal)} detail={`${m.pendingDecisions} require decision today`} icon={FileText} iconColor="text-indigo-500" iconBg="bg-indigo-50" />
           <KPICard label="Avg. Cycle Time" value={`${m.cycleTimeDays}d`} detail="Current portfolio average" icon={Clock} iconColor="text-blue-500" iconBg="bg-blue-50" />
           <KPICard label="Pending Decisions" value={String(m.pendingDecisions)} detail="Require your action today" icon={AlertCircle} iconColor="text-amber-500" iconBg="bg-amber-50" valueColor="text-amber-600" />
           <KPICard label="Portfolio TIV" value="$4.8B" detail="Total insured value managed" icon={Shield} iconColor="text-emerald-500" iconBg="bg-emerald-50" />
@@ -326,7 +362,7 @@ export function UWDashboard({ onSceneChange }: UWDashboardProps) {
               <h3 className="text-sm font-semibold text-gray-800">All Submissions</h3>
               <span className="text-xs text-gray-400">{displayed.length} of {ALL_SUBMISSIONS.length}</span>
               <div className="flex items-center gap-1.5">
-                {(['submission', 'servicing', 'renewal'] as Category[]).map(cat => (
+                {(['submission', 'servicing', 'renewal', 'referral'] as Category[]).map(cat => (
                   <CategoryChip
                     key={cat}
                     category={cat}
@@ -345,25 +381,39 @@ export function UWDashboard({ onSceneChange }: UWDashboardProps) {
                 )}
               </div>
             </div>
-            <select
-              value={sort}
-              onChange={e => setSort(e.target.value as SortKey)}
-              className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-600 cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-300"
-            >
-              <option value="urgency">Sort: Urgency</option>
-              <option value="dateReceived">Sort: Date Received</option>
-              <option value="insured">Sort: Insured</option>
-            </select>
           </div>
 
           {/* Column headers */}
           <div className="flex items-center gap-3 px-5 py-2 bg-gray-50/60 border-b border-gray-100">
             <div className="w-[96px] shrink-0 text-[10px] font-medium text-gray-400 uppercase tracking-wide">Type</div>
-            <div className="flex-1 min-w-0 text-[10px] font-medium text-gray-400 uppercase tracking-wide">Insured / Broker</div>
-            <div className="w-[150px] shrink-0 text-[10px] font-medium text-gray-400 uppercase tracking-wide">Line / Industry</div>
-            <div className="w-[68px] shrink-0 text-[10px] font-medium text-gray-400 uppercase tracking-wide">Req. Limit</div>
-            <div className="w-[84px] shrink-0 text-[10px] font-medium text-gray-400 uppercase tracking-wide">Eff. Date</div>
-            <div className="w-[44px] shrink-0 text-[10px] font-medium text-gray-400 uppercase tracking-wide">Received</div>
+            {(
+              [
+                { col: 'insured' as SortCol, label: 'Insured / Broker', cls: 'flex-1 min-w-0' },
+                { col: 'line' as SortCol, label: 'Line / Industry', cls: 'w-[150px] shrink-0' },
+                { col: 'sumInsured' as SortCol, label: 'Sum Insured', cls: 'w-[68px] shrink-0' },
+                { col: 'effectiveDate' as SortCol, label: 'Eff. Date', cls: 'w-[84px] shrink-0' },
+                { col: 'dateReceived' as SortCol, label: 'Received', cls: 'w-[44px] shrink-0' },
+              ]
+            ).map(({ col, label, cls }) => {
+              const active = sortCol === col
+              return (
+                <button
+                  key={col}
+                  type="button"
+                  onClick={() => handleColSort(col)}
+                  className={`${cls} flex items-center gap-0.5 text-[10px] font-medium uppercase tracking-wide transition-colors text-left ${
+                    active ? 'text-indigo-600' : 'text-gray-400 hover:text-gray-600'
+                  }`}
+                >
+                  <span>{label}</span>
+                  {active && (
+                    sortDir === 'asc'
+                      ? <ChevronUp className="w-3 h-3 shrink-0" />
+                      : <ChevronDown className="w-3 h-3 shrink-0" />
+                  )}
+                </button>
+              )
+            })}
             <div className="w-[90px] shrink-0 text-[10px] font-medium text-gray-400 uppercase tracking-wide">Status</div>
             <div className="w-[70px] shrink-0 text-[10px] font-medium text-gray-400 uppercase tracking-wide">Docs</div>
             <div className="w-[46px] shrink-0" />
@@ -422,24 +472,33 @@ export function UWDashboard({ onSceneChange }: UWDashboardProps) {
                 </div>
 
                 {docsOpen && (
-                  <div className="px-5 py-3 bg-gray-50/60 border-t border-gray-100 flex flex-wrap gap-2">
-                    {row.docs.map(doc => (
-                      <span
-                        key={doc.label}
-                        className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs border ${
-                          doc.received
-                            ? 'bg-white text-gray-700 border-gray-200'
-                            : 'bg-gray-50 text-gray-400 border-dashed border-gray-300'
-                        }`}
-                      >
-                        {doc.received
-                          ? <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0" />
-                          : <Clock className="w-3 h-3 text-gray-400 shrink-0" />
-                        }
-                        {doc.label}
-                        {!doc.received && <span className="text-gray-400"> · Awaiting</span>}
-                      </span>
-                    ))}
+                  <div className="px-5 py-3 bg-gray-50/60 border-t border-gray-100 flex gap-4 items-start">
+                    <button
+                      type="button"
+                      onClick={e => { e.stopPropagation(); if (isNavigable) setShowQAModal(true) }}
+                      className="shrink-0 flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium border bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100 transition-colors"
+                    >
+                      Q&amp;A
+                    </button>
+                    <div className="flex flex-wrap gap-2">
+                      {row.docs.map(doc => (
+                        <span
+                          key={doc.label}
+                          className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs border ${
+                            doc.received
+                              ? 'bg-white text-gray-700 border-gray-200 cursor-pointer'
+                              : 'bg-gray-50 text-gray-400 border-dashed border-gray-300'
+                          }`}
+                        >
+                          {doc.received
+                            ? <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0" />
+                            : <Clock className="w-3 h-3 text-gray-400 shrink-0" />
+                          }
+                          {doc.label}
+                          {!doc.received && <span className="text-gray-400"> · Awaiting</span>}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -507,5 +566,64 @@ export function UWDashboard({ onSceneChange }: UWDashboardProps) {
 
       </div>
     </div>
+
+    {/* Q&A document modal */}
+    {showQAModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowQAModal(false)} />
+        <div className="relative bg-white rounded-2xl shadow-2xl w-[520px] max-h-[80vh] overflow-hidden flex flex-col z-10">
+
+          {/* Modal header */}
+          <div className="px-6 py-4 border-b border-gray-100 flex items-start justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">Documents — Fabrikam Manufacturing</h2>
+              <p className="text-xs text-gray-400 mt-0.5">Commercial Property · Adatum · Submission</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowQAModal(false)}
+              className="text-gray-400 hover:text-gray-600 transition-colors text-lg leading-none ml-4 mt-0.5"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Document list */}
+          <div className="px-6 py-4 overflow-y-auto space-y-2">
+            {fabRow.docs.map(doc => (
+              <div
+                key={doc.label}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-colors ${
+                  doc.label === 'SOV – 47 pages'
+                    ? 'bg-white border-gray-200 cursor-pointer hover:bg-indigo-50 hover:border-indigo-200'
+                    : 'bg-gray-50 border-gray-100 cursor-default'
+                }`}
+                onClick={doc.label === 'SOV – 47 pages' ? () => { setShowQAModal(false); onOpenDocQA?.() } : undefined}
+              >
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                  doc.received ? 'bg-green-50' : 'bg-gray-100'
+                }`}>
+                  <FileText className={`w-4 h-4 ${doc.received ? 'text-green-600' : 'text-gray-400'}`} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-medium ${doc.received ? 'text-gray-900' : 'text-gray-400'}`}>
+                    {doc.label}
+                  </p>
+                  <p className="text-xs text-gray-400">{doc.received ? 'Available' : 'Awaiting'}</p>
+                </div>
+                {doc.label === 'SOV – 47 pages' && (
+                  <span className="text-xs text-indigo-600 font-medium">Open for Q&amp;A →</span>
+                )}
+                {!doc.received && (
+                  <Clock className="w-4 h-4 text-gray-300 shrink-0" />
+                )}
+              </div>
+            ))}
+          </div>
+
+        </div>
+      </div>
+    )}
+    </>
   )
 }

@@ -3,7 +3,7 @@
 import { AlertCircle, FileText, Clock, Shield, ChevronRight } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
-// 3 carried over from Eva's day + 4 new overnight = 7 open submissions
+// 3 carried over from Eva's day + 4 new overnight = 7 open activities
 const SUBMISSIONS = [
   {
     id: 'litware',
@@ -172,7 +172,7 @@ export function MarcusDashboard() {
         {/* KPI row */}
         <div className="grid grid-cols-4 gap-4 mb-6">
           <KPICard
-            label="Open Submissions"
+            label="Open Activities"
             value={String(SUBMISSIONS.length)}
             detail="4 new · 3 carried over"
             icon={FileText}
@@ -257,7 +257,7 @@ export function MarcusDashboard() {
               </div>
               <div className="p-4 space-y-3">
                 <p className="text-sm text-gray-700 leading-relaxed">
-                  Eva completed the Fabrikam Manufacturing quote yesterday and handed off 3 open submissions. Litware Industries (Adatum) is flagged as your top priority — <span className="font-semibold text-red-600">deadline 3:00 PM today</span>.
+                  Eva completed the Fabrikam Manufacturing quote yesterday and handed off 3 open activities. Litware Industries (Adatum) is flagged as your top priority — <span className="font-semibold text-red-600">deadline 3:00 PM today</span>.
                 </p>
                 <p className="text-sm text-gray-700 leading-relaxed">
                   Litware's $30M request is near your $25M authority. A senior referral may be required. Open Copilot for a full briefing.

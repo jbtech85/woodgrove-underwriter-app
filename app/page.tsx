@@ -1,8 +1,9 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Leaf, Settings, LogOut, User, X, Clock } from "lucide-react"
+import { Leaf, Settings, LogOut, User, X, Clock, FileText } from "lucide-react"
 import type { UWScene } from "@/lib/uwTypes"
+import type { ChatMessage } from "@/components/frontend/advisor/AdvisorChatView"
 import { UWDashboard } from "@/components/frontend/uw/UWDashboard"
 import { UWTriagePage } from "@/components/frontend/uw/UWTriagePage"
 import { SubmissionIntakePage } from "@/components/frontend/uw/SubmissionIntakePage"
@@ -52,6 +53,27 @@ export default function UWApp() {
   const [showSettings, setShowSettings] = useState(false)
   const [swaUser, setSwaUser] = useState<{ name: string; email: string } | null>(null)
   const [isChatPaneOpen, setIsChatPaneOpen] = useState(false)
+  const [docQAMessages, setDocQAMessages] = useState<ChatMessage[] | null>(null)
+
+  const SOV_QA_MESSAGES: ChatMessage[] = [
+    {
+      id: 'sov-q1',
+      role: 'user',
+      content: 'Can you review the Fabrikam Manufacturing SOV and surface anything I should know before I make my decision?',
+      timestamp: '8:47 AM',
+    },
+    {
+      id: 'sov-a1',
+      role: 'assistant',
+      content: `I've reviewed the **Fabrikam Manufacturing Statement of Values** (47 pages, submitted by Adatum). Here's what stands out:\n\n**Portfolio overview**\n- 18 locations across 6 states — highest concentration in Michigan (7 sites)\n- Total Insured Value: **$2.1B TIV**\n- Largest single location: Detroit Assembly Plant at **$340M TIV**\n\n**Risk flags**\n- 3 locations in FEMA Flood Zone AE — flood sublimit should be reviewed before binding\n- 2 pre-1980 facilities with no documented upgrades on file\n- Sprinkler coverage gaps noted at 4 warehouse sites\n\n**Bottom line**\nThe Michigan concentration and flood exposure are the main concerns at this limit. The missing Inspection Report and Engineering Survey would normally address these directly — worth flagging to Adatum before the 5:00 PM deadline.\n\nWant me to draft a document request to Adatum, or pull the prior policy for comparison?`,
+      timestamp: '8:47 AM',
+    },
+  ]
+
+  function handleOpenDocQA() {
+    setDocQAMessages(SOV_QA_MESSAGES)
+    setIsChatPaneOpen(true)
+  }
 
   useEffect(() => {
     fetch('/.auth/me')
@@ -179,7 +201,7 @@ export default function UWApp() {
       <div className="flex-1 flex overflow-hidden">
         <main className="flex-1 overflow-hidden">
           {persona === 'eva' && scene === 'dashboard' && (
-            <UWDashboard onSceneChange={setScene} />
+            <UWDashboard onSceneChange={setScene} onOpenDocQA={handleOpenDocQA} />
           )}
           {persona === 'eva' && scene === 'triage' && (
             <UWTriagePage onSceneChange={setScene} />
@@ -206,18 +228,25 @@ export default function UWApp() {
               <Leaf className="w-4 h-4 text-indigo-300" />
               <span className="text-sm font-semibold">Woodgrove Copilot</span>
               <button
-                onClick={() => setIsChatPaneOpen(false)}
+                onClick={() => { setIsChatPaneOpen(false); setDocQAMessages(null) }}
                 className="ml-auto text-indigo-300 hover:text-white transition-colors"
                 aria-label="Close"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
+            {docQAMessages && (
+              <div className="bg-indigo-800 px-4 py-2 flex items-center gap-2 flex-shrink-0">
+                <FileText className="w-3.5 h-3.5 text-indigo-300 shrink-0" />
+                <span className="text-xs text-indigo-200">Context: SOV – 47 pages · Fabrikam Manufacturing</span>
+              </div>
+            )}
             <div className="flex-1 overflow-hidden">
               <AdvisorChatView
                 advisor={MOCK_ADVISOR}
                 embedded
                 scene={scene}
+                initialMessages={docQAMessages ?? undefined}
               />
             </div>
           </div>

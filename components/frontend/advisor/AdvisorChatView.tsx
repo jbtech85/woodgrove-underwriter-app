@@ -48,9 +48,10 @@ interface AdvisorChatViewProps {
   embedded?: boolean
   scene?: string
   callSegmentIndex?: number
+  initialMessages?: ChatMessage[]
 }
 
-interface ChatMessage {
+export interface ChatMessage {
   id: string
   role: "user" | "assistant"
   content: string
@@ -467,8 +468,13 @@ export const AdvisorChatView: React.FC<AdvisorChatViewProps> = ({
   embedded = false,
   scene,
   callSegmentIndex,
+  initialMessages,
 }) => {
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages ?? [])
+
+  useEffect(() => {
+    if (initialMessages && initialMessages.length > 0) setMessages(initialMessages)
+  }, [initialMessages])
   const [inputValue, setInputValue] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const isAccountScene = ACCOUNT_SCENES.includes(scene ?? '')

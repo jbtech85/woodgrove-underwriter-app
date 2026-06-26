@@ -23,7 +23,7 @@ const AGENTS: {
 }[] = [
   {
     id: 'doc-intel',
-    name: 'Document Intelligence',
+    name: 'Schedule of Valued Items',
     description: 'Extracting 1,200+ locations from 47-page SOV',
     icon: Search,
     color: 'text-blue-600',
