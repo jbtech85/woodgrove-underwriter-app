@@ -1,334 +1,125 @@
-# 🌿 Sage Retirement Planning
+# Woodgrove Insurance Underwriting
 
-**A Microsoft accelerator for AI-powered retirement planning — the first application to integrate Work IQ, Foundry IQ, and Fabric IQ into a single full-stack experience.**
-
-[![Next.js](https://img.shields.io/badge/Next.js-15.2-black?logo=next.js)](https://nextjs.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-Python-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
-[![Azure AI](https://img.shields.io/badge/Azure%20AI-Agents-0078D4?logo=microsoft-azure)](https://azure.microsoft.com/en-us/products/ai-services/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178C6?logo=typescript)](https://www.typescriptlang.org/)
-
-> **Triple IQ Integration** — Sage combines **Work IQ** (Microsoft 365 context via MCP), **Foundry IQ** (Azure AI Search knowledge base via MCP), and **Fabric IQ** (Microsoft Fabric Data Agent for lakehouse analytics) to deliver a uniquely intelligent financial planning experience that no other accelerator offers.
+Commercial insurance underwriting demo — an agent-powered platform for underwriters, built on Microsoft Copilot Studio.
 
 ---
 
-## ✨ Key Features
+## Architecture
 
-### 🔮 AI-Powered Scenario Projections
-Ask natural language questions like *"What if I maximize my 401(k) contributions?"* or *"How would a market crash affect my retirement?"* and get instant, personalized projections powered by Azure AI Agents.
+```
++-----------------------------------------------------------------------------+
+|  Next.js Frontend  :3847                                                    |
+|  Underwriter workspace                                                      |
++-------------------------------+---------------------------------------------+
+                                | /api/*  (HTTPS + SSE)
++-------------------------------v---------------------------------------------+
+|  FastAPI Backend (BFF)  :8172                                               |
+|  session state - OBO token exchange - citation resolution - SSE relay       |
++-------------------------------+---------------------------------------------+
+                                |
++-------------------------------v---------------------------------------------+
+|  Copilot Studio Agent (GPT-4.1)                                             |
++--------+-----------------+-----------------+--------------------------------+
+         |                 |                 |                          |
+         v                 v                 v                          v
+    CAT Agent        Quoting Agent   Underwriting Guidelines Agent   Work IQ
+  (cites Verisk,       (stand-in,     (grounded on the Underwriting  (M365
+   Moody's RMS —        no data       Reference Library — a          context)
+   not live-            attached)     SharePoint knowledge base)
+   integrated)
 
-### 📊 Real-Time Portfolio Analysis
-- View projected account balances across 401(k), Roth IRA, and brokerage accounts
-- See holding-level projections with allocation changes
-- Understand risks and opportunities for each scenario
+```
 
-### ⏱️ Flexible Timeframes
-Project scenarios across 3-month, 6-month, or 12-month horizons with proportionally accurate results.
+## Modules
 
-### 🎯 Quick Scenario Templates
-One-click example scenarios to explore common retirement planning questions:
-- Max out 401(k) contributions
-- Increase savings rate by 5%
-- Simulate a 20% market crash
-- Add Roth IRA contributions
-- Plan for early retirement
-
-### 🔄 Mock & Live Modes
-- **Mock Mode**: Fully functional demo without Azure credentials
-- **Live Mode**: Connect to Azure AI for real LLM-powered analysis
-
-### 🧠 Triple IQ Integration (Differentiator)
-
-| IQ Service | What It Does | Protocol |
-|------------|-------------|----------|
-| **Work IQ** | Pulls calendar, emails, files from Microsoft 365 to enrich advisor context (upcoming client meetings, recent correspondence, shared documents) | Local MCP via CLI |
-| **Foundry IQ** | Retrieves grounded knowledge from an Azure AI Search knowledge base for advisor chat (compliance rules, product details, regulatory guidance) | Cloud MCP (Azure AI Search) |
-| **Fabric IQ** | Queries a Microsoft Fabric Data Agent backed by a lakehouse for real client/portfolio analytics during what-if scenarios | OpenAI Assistants API via SPN |
-
-All three are **optional and gracefully degrade** — the app works fully in mock mode with none of them configured.
+| Module | Key Capability |
+|---|---|
+| **Dashboard** | Simulates an AI-triaged morning briefing — overnight submissions, flagged risks, KPI rollups — that a production build would compute from the policy administration system and a real triage model |
+| **Triage Panel** | Simulates AI-ranked submission triage — fraud signals, compliance gaps, authority-limit flags — with the AI's reasoning shown alongside each flag |
+| **Submission Intake** | Simulates the multi-agent document-extraction pipeline (document intelligence, loss-run parsing, ACORD-to-policy mapping, data-quality checks) that a production build would run via Azure AI Foundry — shown as a scripted walkthrough with fixed results, not a live extraction |
+| **Marcus** | An alternate, optional dashboard with its own submission queue — for presenters to extend the story beyond the main Underwriter walkthrough |
+| **Advisor AI Chat** | Persistent chat side panel, live-connected to a Copilot Studio-hosted agent (GPT-4.1) via the Responses API — grounded in knowledge sources, with citation-backed answers. Available throughout the app |
 
 ---
 
-## 🏗️ Architecture
+## Agent
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Frontend (Next.js)                       │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
-│  │  Dashboard  │  │  Portfolio  │  │  Scenario Projection    │  │
-│  │    View     │  │    View     │  │      Overlay            │  │
-│  └─────────────┘  └─────────────┘  └─────────────────────────┘  │
-└────────────────────────────┬────────────────────────────────────┘
-                             │ REST API
-                             ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      Backend (FastAPI)                          │
-│  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌───────────┐  │
-│  │  /chat     │  │ /project-  │  │ /advisor/* │  │ /api/     │  │
-│  │  endpoint  │  │  scenario  │  │ WorkIQ+MCP │  │ fabric/*  │  │
-│  └────────────┘  └────────────┘  └────────────┘  └───────────┘  │
-└──────┬─────────────────┬────────────────┬──────────────┬────────┘
-       │                 │                │              │
-       ▼                 ▼                ▼              ▼
-┌──────────────┐  ┌──────────────┐  ┌──────────┐  ┌──────────────┐
-│  Azure AI    │  │  Foundry IQ  │  │ Work IQ  │  │  Fabric IQ   │
-│  Foundry     │  │  (AI Search  │  │ (M365    │  │  (Data Agent │
-│  GPT-4.1     │  │   MCP KB)    │  │  MCP)    │  │   Lakehouse) │
-│  Agent       │  │              │  │          │  │              │
-│  • Cashflow  │  │  Compliance  │  │ Calendar │  │  Client &    │
-│  • Portfolio │  │  Products    │  │ Emails   │  │  Portfolio   │
-│  • Risk      │  │  Regulations │  │ Files    │  │  Analytics   │
-│  • Tax       │  │  Guidance    │  │ Meetings │  │  SQL + NL    │
-└──────────────┘  └──────────────┘  └──────────┘  └──────────────┘
-```
+**Advisor AI Chat** is the one real, live agent connection in this app — not a simulation. Both the Underwriter and Advisor personas can reach it, though it currently responds the same way regardless of which one is asking; persona isn't passed into the agent call.
+
+- **Platform:** Microsoft Copilot Studio (Power Platform) — reached from the backend via the M365 Agents SDK, not Azure AI Foundry
+- **Knowledge source:** one SharePoint knowledge base, the Underwriting Reference Library (templates, samples, account manuals, proposals)
+- **Sub-agents** (Copilot Studio's own agent-as-tool pattern — direct descendants of the main agent in the Copilot Studio Agents tab):
+  - **CAT Agent** — instructed to cite Verisk (earthquake, flood) and Moody's RMS for catastrophe exposure by region or account; not actually integrated with either vendor today — a real build would need live API connections
+  - **Quoting Agent** — a stand-in today, with no attached tools or data
+  - **Underwriting Guidelines Agent** — grounded on the same SharePoint knowledge base, for underwriting-manual and treaty-guideline questions
+- **Tools:** Work IQ (Microsoft 365 context)
+- **Auth:** the backend exchanges the signed-in user's token for a Copilot Studio–scoped token on their behalf (on-behalf-of flow via MSAL) before calling the agent
+
+### Citation resolution (separate from the agent)
+
+After the agent responds, the backend scans its reply for `[REF:xxx]` markers and resolves them against a local, bundled `regulatory_rules.json` file — independent of whatever the agent itself is grounded on, and not a Copilot Studio tool call. Today, only the Advisor UI renders the resulting citation footer.
+
+### Simulated agentic process
+
+Beyond the real agent, the Underwriter persona's daily-workflow pages (Dashboard, Triage, Submission Intake, Midday Check-In, Wrap-Up) represent the broader Foundry-orchestrated pipeline described in the demo script, entirely through static UI with no connection to the agent above. Submission Intake depicts four named agents — document intelligence, loss-run parsing, ACORD-to-policy mapping, data quality — with fixed, scripted results rather than a live multi-agent run.
 
 ---
 
-## 🚀 Quick Start
-
-### Prerequisites
-- Node.js 18+ and pnpm
-- Python 3.11+ and uv
-- (Optional) Azure AI Foundry project for live mode
-- (Optional) Azure AI Search instance for Foundry IQ
-- (Optional) Microsoft Fabric workspace with a published Data Agent for Fabric IQ
-- (Optional) Work IQ CLI with local auth tokens for Work IQ
-
-### 1. Clone and Install
-
-```bash
-git clone https://github.com/JawadAminMSFT/sage-retirement-planning.git
-cd sage-retirement-planning
-
-# Frontend
-pnpm install
-
-# Backend
-cd backend
-uv sync
-```
-
-### 2. Configure Environment
-
-Copy the example env and fill in values for the capabilities you want:
-
-```bash
-cp .env.example backend/.env
-```
-
-**Core (required for live mode):**
-```env
-PROJECT_ENDPOINT=https://your-ai-foundry.services.ai.azure.com/api/projects/your-project
-MODEL_DEPLOYMENT_NAME=gpt-4.1
-DEMO_TENANT_ID=<your-azure-ad-tenant-id>   # if az cli targets a different tenant
-```
-
-**Foundry IQ — Azure AI Search Knowledge Base (MCP):**
-```env
-SAGE_KB_MCP_URL=https://<your-search>.search.windows.net/knowledgebases/<kb-name>/mcp?api-version=2025-11-01-preview
-SAGE_KB_MCP_API_KEY=<your-search-api-key>
-SAGE_KB_MCP_TOOL_NAME=knowledge_base_retrieve
-SAGE_KB_MCP_TIMEOUT_SECONDS=8
-SAGE_KB_MCP_RETRIES=1
-```
-
-**Fabric IQ — Microsoft Fabric Data Agent (SPN):**
-```env
-FABRIC_TENANT_ID=<fabric-tenant-id>
-FABRIC_CLIENT_ID=<spn-application-client-id>
-FABRIC_CLIENT_SECRET=<spn-client-secret>
-FABRIC_DATA_AGENT_URL=https://api.fabric.microsoft.com/v1/workspaces/<ws-id>/dataagents/<agent-id>/aiassistant/openai
-FABRIC_DATA_AGENT_ID=<published-assistant-id>
-```
-
-**Work IQ — Microsoft 365 Context (local MCP CLI):**
-```env
-# "local" = live queries via WorkIQ CLI  |  "mock" = static data  |  "disabled" = off
-WORKIQ_MODE=local
-```
-
-### 3. Run the Application
-
-**Terminal 1 - Backend (port 8172):**
-```bash
-cd backend
-uv run uvicorn main:app --port 8172
-```
-
-**Terminal 2 - Frontend (port 3847):**
-```bash
-pnpm dev
-```
-
-Open http://localhost:3847 in your browser.
-
----
-
-## 📸 Screenshots
-
-### Dashboard View
-Professional dashboard with YTD performance, quick stats, and AI chat interface.
-
-### Portfolio View with "What If" Projections
-Click the **"What If"** button to open the scenario projection overlay and explore how different decisions affect your retirement.
-
-### Scenario Projection Results
-See projected account balances, percentage changes, and AI-generated insights including risks and opportunities.
-
----
-
-## 🧪 Testing
-
-### Run All Tests
-```bash
-# Regression tests (no backend required)
-python tests/test_regression.py
-
-# Projection API tests (mock mode)
-python tests/test_projection_api.py
-
-# Live API tests (requires running backend)
-python tests/test_projection_live.py
-```
-
-### Test Coverage
-- ✅ 90+ regression tests across 6 phases
-- ✅ 48+ projection API validation checks
-- ✅ 11 live scenario tests with sanity validation
-
----
-
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Layer | Technology |
-|-------|------------|
-| **Frontend** | Next.js 15, React 19, TypeScript, Tailwind CSS |
-| **Backend** | FastAPI, Python 3.11+, uv |
-| **AI** | Azure AI Foundry Agents (GPT-4.1) |
-| **Work IQ** | Microsoft 365 MCP integration (calendar, email, files) via local CLI |
-| **Foundry IQ** | Azure AI Search Knowledge Base via cloud MCP |
-| **Fabric IQ** | Microsoft Fabric Data Agent via OpenAI Assistants API (SPN auth) |
-| **Styling** | Tailwind CSS, Lucide Icons |
-| **Testing** | Python unittest, Live API tests |
+|---|---|
+| Frontend | Next.js 15, React 19, TypeScript, Tailwind CSS |
+| Backend runtime | Python, FastAPI, uvicorn |
+| Agent runtime | Microsoft Copilot Studio (Power Platform), via the M365 Agents SDK (`microsoft-agents-copilotstudio-client`) |
+| Knowledge / grounding | One SharePoint knowledge base (Underwriting Reference Library); Work IQ (M365 context) |
+| Sub-agents | CAT Agent, Quoting Agent, Underwriting Guidelines Agent — Copilot Studio's agent-as-tool pattern |
+| Auth | Microsoft Entra ID (user sign-in), on-behalf-of token exchange to a Copilot Studio–scoped token (MSAL confidential client) |
+| Session / data storage | Local JSON files by default; an optional Azure Blob Storage backend also exists. The session-ID → Copilot Studio conversation-ID mapping is a separate in-memory dict today — not persistent across restarts or replicas |
+| Citation resolution | Backend regex over the agent's reply text against a local `regulatory_rules.json` file — Advisor UI only |
+| Deployment | Azure App Service (frontend), Azure Container Apps (backend), Azure Container Registry |
+| CI/CD | GitHub Actions |
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
-sage-retirement-planning/
-├── app/                    # Next.js app router
-│   ├── page.tsx           # Main application page
-│   └── layout.tsx         # Root layout
-├── components/
-│   └── frontend/          # React components
-│       ├── DashboardView.tsx
-│       ├── PortfolioView.tsx
-│       ├── ScenarioProjectionOverlay.tsx
-│       └── ...
-├── lib/
-│   ├── api.ts             # API client (mock/live modes)
-│   ├── mockData.ts        # Mock data generators
-│   └── mockPortfolio.ts   # Sample portfolio data
-├── backend/
-│   ├── main.py            # FastAPI server
-│   ├── workiq_service.py  # Work IQ integration (M365 MCP)
-│   ├── fabric_service.py  # Fabric IQ integration (Data Agent)
-│   ├── pyproject.toml     # Python dependencies
-│   └── data/              # User profiles, products, mock data
-├── scripts/
-│   └── workiq-check/      # Work IQ CLI query script
-├── skills/
-│   └── azure-container-apps/  # Deployment skill (ACA)
-├── docs/
-│   ├── FABRIC_INTEGRATION.md  # Fabric IQ setup guide
-│   └── ADVISOR_VIEW_SPEC.md   # Advisor view specification
-├── tests/
-│   ├── test_regression.py
-│   ├── test_projection_api.py
-│   └── test_projection_live.py
-└── .env.example           # Environment template (all IQ vars)
+app/
+  page.tsx                              # Persona/scene state machine (Underwriter, Marcus, Advisor)
+  layout.tsx                            # Root layout
+  globals.css                           # Global styles
+  api/advisor/chat/stream/route.ts      # Server-side proxy to the backend (same-origin SSE)
+
+components/frontend/
+  uw/
+    UWDashboard.tsx                     # Morning submission dashboard
+    UWTriagePage.tsx                    # AI-triaged fraud/compliance flags
+    SubmissionIntakePage.tsx            # Simulated Foundry multi-agent extraction walkthrough
+    DailyTasksPage.tsx                  # Midday KPI check-in
+    WrapUpPage.tsx                      # End-of-day summary and handoff
+  marcus/
+    MarcusDashboard.tsx                 # Optional presenter-extension dashboard, alternate to the main Underwriter walkthrough
+  advisor/
+    AdvisorChatView.tsx                 # Advisor AI Chat — the real agent-connected panel
+  shared/
+    SageChatPane.tsx                    # Floating chat button
+    ModeToggle.tsx, PoweredByLabel.tsx, UIComponents.tsx, VegaChart.tsx
+  irm/                                  # Leftover from the IRM/Sage template — commented out in app/page.tsx, not part of this app
+
+lib/
+  uwData.ts, uwTypes.ts                 # Underwriter demo data and types
+  advisorApi.ts                         # Real backend calls for the chat panel
+  irmData.ts, irmTypes.ts, mockData.ts  # Leftover from the shared template — confirm before relying on these
+
+backend/
+  main.py                               # FastAPI entry point, Copilot Studio agent connection
+  copilotstudio_compat.py               # Patches a pydantic bug in the M365 Agents SDK's citation model handling
+  advisor_storage.py                    # Data layer behind the Advisor endpoints
+  storage.py                            # Conversation/scenario storage abstraction (local JSON or Azure Blob)
+  fabric_service.py                     # Inherited from the Sage template — not wired to any frontend, out of scope
+  data/                                 # JSON seed data, including regulatory_rules.json
+  pyproject.toml                        # Python dependencies
+
+Dockerfile, backend/Dockerfile, docker-compose.yml, next.config.mjs, package.json
 ```
-
----
-
----
-
-## 🔌 IQ Integration Setup
-
-### Foundry IQ (Azure AI Search MCP Knowledge Base)
-
-Foundry IQ gives the advisor chat grounded knowledge from a curated knowledge base (compliance rules, product sheets, regulatory guidance).
-
-1. **Create an Azure AI Search resource** in your Azure subscription
-2. **Create a Knowledge Base** in the Azure AI Search resource with your advisor content (documents, PDFs, etc.)
-3. **Enable the MCP endpoint** — the knowledge base exposes an MCP-compatible endpoint at:
-   ```
-   https://<search-name>.search.windows.net/knowledgebases/<kb-name>/mcp?api-version=2025-11-01-preview
-   ```
-4. **Set environment variables** in `backend/.env`:
-   ```env
-   SAGE_KB_MCP_URL=https://<search-name>.search.windows.net/knowledgebases/<kb-name>/mcp?api-version=2025-11-01-preview
-   SAGE_KB_MCP_API_KEY=<your-admin-or-query-api-key>
-   SAGE_KB_MCP_TOOL_NAME=knowledge_base_retrieve
-   ```
-5. The advisor chat will automatically use MCP-first retrieval with fallback to the AI agent if MCP is unavailable.
-
-### Fabric IQ (Microsoft Fabric Data Agent)
-
-Fabric IQ enables natural-language queries against a Fabric Lakehouse containing client and portfolio data.
-
-1. **Set up a Fabric workspace** with a Lakehouse containing your client/portfolio tables
-2. **Create and publish a Data Agent** in the Fabric workspace (see [docs/FABRIC_INTEGRATION.md](docs/FABRIC_INTEGRATION.md) for step-by-step)
-3. **Register a Service Principal (SPN)** in the Fabric tenant with Contributor access to the workspace
-4. **Set environment variables** in `backend/.env`:
-   ```env
-   FABRIC_TENANT_ID=<fabric-aad-tenant-id>
-   FABRIC_CLIENT_ID=<spn-app-client-id>
-   FABRIC_CLIENT_SECRET=<spn-client-secret>
-   FABRIC_DATA_AGENT_URL=https://api.fabric.microsoft.com/v1/workspaces/<ws-id>/dataagents/<agent-id>/aiassistant/openai
-   FABRIC_DATA_AGENT_ID=<published-assistant-id>
-   ```
-5. The client persona in Live mode will show a **Live (Fabric)** data source option for what-if analysis.
-
-### Work IQ (Microsoft 365 Context via MCP)
-
-Work IQ enriches the advisor experience with real-time Microsoft 365 context: today's calendar, recent emails about clients, shared files.
-
-1. **Install the Work IQ CLI** and authenticate with your Microsoft 365 account locally
-2. **Place the MCP query script** at `scripts/workiq-check/query.mjs` (included in the repo)
-3. **Set environment variable** in `backend/.env`:
-   ```env
-   WORKIQ_MODE=local    # "local" for live CLI queries, "mock" for static demo data, "disabled" to turn off
-   ```
-4. On startup, the backend pre-fetches calendar, email, meeting, and file context into an in-memory cache (5-min TTL).
-5. For cloud deployments where the CLI is not available, use `WORKIQ_MODE=mock` to serve bundled demo data from `backend/data/workiq_mock.json`.
-
----
-
-## 🔐 Security
-
-- ✅ No hardcoded secrets in source code
-- ✅ Environment variables for all credentials
-- ✅ `.env` files are gitignored
-- ✅ Input validation on all API endpoints
-- ✅ Fabric IQ uses SPN (ClientSecretCredential) — isolated from user az cli auth
-- ✅ Foundry IQ uses API key scoped to the search resource
-- ✅ Work IQ runs only locally with user's own M365 auth tokens
-
----
-
-## 📄 License
-
-MIT License - See [LICENSE](LICENSE) for details.
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
----
-
-<p align="center">
-  <strong>Built with ❤️ using Azure AI Foundry, Azure AI Search, Microsoft Fabric & Work IQ</strong>
-</p>
