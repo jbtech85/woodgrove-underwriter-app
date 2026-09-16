@@ -104,6 +104,21 @@ def _extract_citations(text: str) -> tuple:
     return text, citations
 
 
+# Copilot Studio's generative-answers grounding appends a "Source Documents:"
+# bullet list of SharePoint links plus trailing markdown reference-link
+# definitions ("[1]: https://... \"title\""). The underwriter UI doesn't want
+# these shown, so strip them before the text reaches the frontend.
+def _strip_grounding_citations(text: str) -> str:
+    text = re.sub(
+        r'\n{0,2}\**Source Documents:?\**\s*\n(?:\s*[-*]\s*\[[^\]]+\]\([^)]+\)\s*\n?)+',
+        '\n\n',
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(r'\n?\[\d+\]:\s*\S+(?:\s+"[^"]*")?\s*', '', text)
+    return re.sub(r'\n{3,}', '\n\n', text).strip()
+
+
 # Copilot Studio agent integration
 async def _get_copilot_token(user_access_token: str) -> str:
     """Exchange user's Easy Auth token for a Copilot Studio scoped token via OBO."""
@@ -227,7 +242,7 @@ async def advisor_chat_stream(request: AdvisorChatRequest, http_request: FastAPI
             if ev["type"] == "content":
                 accumulated += ev["data"].get("content", "")
                 yield f"data: {json.dumps({'type': 'content', 'data': ev['data'].get('content', '')})}\n\n"
-        clean_text, citations = _extract_citations(accumulated)
+        clean_text, citations = _extract_citations(_strip_grounding_citations(accumulated))
         yield f"data: {json.dumps({'type': 'complete', 'data': {'response': clean_text, 'citations': citations}})}\n\n"
 
     return StreamingResponse(
