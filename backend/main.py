@@ -29,6 +29,9 @@ from microsoft_agents.copilotstudio.client import CopilotClient, ConnectionSetti
 from microsoft_agents.activity import ActivityTypes
 import msal
 
+import copilotstudio_compat
+copilotstudio_compat.apply()
+
 # Data directory
 DATA_DIR = Path(__file__).parent / "data"
 
